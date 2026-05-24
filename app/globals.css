@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-sans: 'DM Sans', sans-serif;
+  --font-serif: 'DM Serif Display', serif;
+  --accent: #4f46e5;
+  --accent-dark: #3730a3;
+  --accent-light: #eef2ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: #f8f7f4;
+  color: #1a1a1a;
+  min-height: 100vh;
+}
+
+input[type='text'],
+input[type='number'],
+input[type='date'],
+select {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #e2e0d8;
+  border-radius: 10px;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  background: #fff;
+  color: #1a1a1a;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+input:focus,
+select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+button {
+  cursor: pointer;
+  font-family: var(--font-sans);
+}
