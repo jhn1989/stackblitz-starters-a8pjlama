@@ -10,12 +10,6 @@ type SortBy = 'price-asc' | 'price-desc' | 'name';
 type FlightSort = 'best' | 'cheapest' | 'fastest';
 type StopsFilter = 'any' | 'direct' | '1stop';
 
-function toYYMMDD(d: string) {
-  if (!d) return '';
-  const parts = d.split('-');
-  return parts[0].slice(2) + parts[1] + parts[2];
-}
-
 function buildSkyscannerUrl(
   origin: string,
   destCode: string,
@@ -25,23 +19,20 @@ function buildSkyscannerUrl(
   flightSort: FlightSort,
   stopsFilter: StopsFilter
 ) {
-  const o = (origin || 'CPH').toLowerCase();
-  const de = (destCode || '').toLowerCase();
-  const out = toYYMMDD(start);
-  const inb = toYYMMDD(end);
-  const adults = Math.max(1, travelers);
-  // adults count goes in the path, not just params
-  let path = 'https://www.skyscanner.net/transport/flights/' + o + '/' + de + '/';
-  if (out) { path = path + out + '/'; }
-  if (inb) { path = path + inb + '/'; }
-  path = path + adults + '/';
   const params = new URLSearchParams();
+  params.set('origin', (origin || 'CPH').toLowerCase());
+  params.set('destination', (destCode || '').toLowerCase());
+  if (start) { params.set('outboundDate', start); }
+  if (end) { params.set('inboundDate', end); }
+  params.set('adultsv2', String(Math.max(1, travelers)));
+  params.set('cabinclass', 'economy');
   params.set('currency', 'EUR');
   params.set('locale', 'en-GB');
+  params.set('market', 'DK');
   if (flightSort !== 'best') { params.set('sort', flightSort); }
-  if (stopsFilter === 'direct') { params.set('preferdirects', 'true'); params.set('stops', '0'); }
+  if (stopsFilter === 'direct') { params.set('preferdirects', 'true'); }
   if (stopsFilter === '1stop') { params.set('stops', '1'); }
-  return path + '?' + params.toString();
+  return 'https://www.skyscanner.net/g/referrals/v1/flights/day-view?' + params.toString();
 }
 
 function buildBookingUrl(
