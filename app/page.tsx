@@ -20,18 +20,32 @@ function buildSkyscannerUrl(
   stopsFilter: StopsFilter
 ) {
   const params = new URLSearchParams();
+
   params.set('origin', (origin || 'CPH').toLowerCase());
   params.set('destination', (destCode || '').toLowerCase());
-  if (start) { params.set('outboundDate', start); }
-  if (end) { params.set('inboundDate', end); }
+
+  if (start) {
+    params.set('outboundDate', start);
+  }
+
+  if (end) {
+    params.set('inboundDate', end);
+  }
+
   params.set('adultsv2', String(Math.max(1, travelers)));
   params.set('cabinclass', 'economy');
   params.set('currency', 'EUR');
   params.set('locale', 'en-GB');
   params.set('market', 'DK');
-  if (flightSort !== 'best') { params.set('sort', flightSort); }
-  if (stopsFilter === 'direct') { params.set('preferdirects', 'true'); }
-  if (stopsFilter === '1stop') { params.set('stops', '1'); }
+
+  if (flightSort === 'cheapest' || flightSort === 'fastest') {
+    params.set('sortby', flightSort);
+  }
+
+  if (stopsFilter === 'direct') {
+    params.set('preferDirects', 'true');
+  }
+
   return 'https://www.skyscanner.net/g/referrals/v1/flights/day-view?' + params.toString();
 }
 
