@@ -7,6 +7,8 @@ import { demoFlight, calculateTrip, fmt } from '../lib/pricing';
 
 type Step = 1 | 2 | 3 | 4;
 type SortBy = 'price-asc' | 'price-desc' | 'name';
+type FlightSort = 'best' | 'cheapest' | 'fastest';
+type StopsFilter = 'any' | 'direct' | '1stop';
 
 function toYYMMDD(d: string) {
   if (!d) return '';
@@ -20,7 +22,8 @@ function buildSkyscannerUrl(
   start: string,
   end: string,
   travelers: number,
-  directOnly: boolean
+  flightSort: FlightSort,
+  stopsFilter: StopsFilter
 ) {
   const o = (origin || 'CPH').toLowerCase();
   const de = (destCode || '').toLowerCase();
@@ -31,7 +34,11 @@ function buildSkyscannerUrl(
   if (inb) { path = path + inb + '/'; }
   const params = new URLSearchParams();
   params.set('adults', String(travelers));
-  if (directOnly) { params.set('preferdirects', 'true'); }
+  params.set('currency', 'EUR');
+  params.set('locale', 'en-GB');
+  if (flightSort !== 'best') { params.set('sort', flightSort); }
+  if (stopsFilter === 'direct') { params.set('preferdirects', 'true'); params.set('stops', '0'); }
+  if (stopsFilter === '1stop') { params.set('stops', '1'); }
   return path + '?' + params.toString();
 }
 
@@ -111,7 +118,8 @@ export default function Home() {
   const [selectedDest, setSelectedDest] = useState<Destination | null>(null);
   const [dateError, setDateError] = useState('');
   const [sortBy, setSortBy] = useState<SortBy>('price-asc');
-  const [directOnly, setDirectOnly] = useState(false);
+  const [flightSort, setFlightSort] = useState<FlightSort>('best');
+  const [stopsFilter, setStopsFilter] = useState<StopsFilter>('any');
 
   const today = new Date().toISOString().split('T')[0];
   const estimate = getEstimate(selectedDest, origin, startDate, endDate, travelers);
@@ -407,17 +415,41 @@ export default function Home() {
                 <strong>How we calculate this:</strong> Flight prices are sample estimates based on typical routes, not real quotes. Hotel, food and transport costs are researched averages for each destination. Use this as a rough planning guide, then search live prices below.
               </p>
             </div>
-            <div style={{ background: '#fff', border: '1px solid #E8E6DF', borderRadius: 12, padding: '14px 16px', marginBottom: 12 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, color: '#1a1a1a', cursor: 'pointer' }}>
-                <input type="checkbox" checked={directOnly} onChange={function (e) { setDirectOnly(e.target.checked); }} style={{ width: 16, height: 16, cursor: 'pointer' }} />
-                Direct flights only
-              </label>
-              <p style={{ fontSize: 12, color: '#aaa', marginTop: 6 }}>
-                Skyscanner handles stops, cheapest and fastest sorting on its own page. Your dates, travelers and this direct-only choice are passed in automatically.
-              </p>
+
+            <div style={{ background: '#fff', border: '1px solid #E8E6DF', borderRadius: 12, padding: '16px 18px', marginBottom: 12 }}>
+              <p style={{ fontSize: 13, fontWeight: 600, color: '#1a1a1a', marginBottom: 12 }}>Flight preferences for Skyscanner</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#555', marginBottom: 6 }}>Sort results by</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {([['best', 'Best'], ['cheapest', 'Cheapest'], ['fastest', 'Fastest']] as [FlightSort, string][]).map(function (opt) {
+                      const active = flightSort === opt[0];
+                      return (
+                        <button key={opt[0]} onClick={function () { setFlightSort(opt[0]); }} style={{ flex: 1, padding: '8px', borderRadius: 8, border: active ? '2px solid var(--accent)' : '1px solid #E2E0D8', background: active ? 'var(--accent-light)' : '#fff', color: active ? 'var(--accent)' : '#555', fontSize: 13, fontWeight: active ? 600 : 400, cursor: 'pointer' }}>
+                          {opt[1]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#555', marginBottom: 6 }}>Stops</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {([['any', 'Any stops'], ['direct', 'Direct only'], ['1stop', '1 stop max']] as [StopsFilter, string][]).map(function (opt) {
+                      const active = stopsFilter === opt[0];
+                      return (
+                        <button key={opt[0]} onClick={function () { setStopsFilter(opt[0]); }} style={{ flex: 1, padding: '8px', borderRadius: 8, border: active ? '2px solid var(--accent)' : '1px solid #E2E0D8', background: active ? 'var(--accent-light)' : '#fff', color: active ? 'var(--accent)' : '#555', fontSize: 13, fontWeight: active ? 600 : 400, cursor: 'pointer' }}>
+                          {opt[1]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
             </div>
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
-              <a href={buildSkyscannerUrl(origin || 'CPH', selectedDest.airportCode, startDate, endDate, travelers, directOnly)} target="_blank" rel="noopener noreferrer" style={{ display: 'block', textAlign: 'center', padding: '14px', background: '#0770E3', color: '#fff', borderRadius: 12, fontSize: 15, fontWeight: 500, textDecoration: 'none' }}>
+              <a href={buildSkyscannerUrl(origin || 'CPH', selectedDest.airportCode, startDate, endDate, travelers, flightSort, stopsFilter)} target="_blank" rel="noopener noreferrer" style={{ display: 'block', textAlign: 'center', padding: '14px', background: '#0770E3', color: '#fff', borderRadius: 12, fontSize: 15, fontWeight: 500, textDecoration: 'none' }}>
                 ✈️ Search flights on Skyscanner
               </a>
               <a href={buildBookingUrl(selectedDest.city, selectedDest.country, startDate, endDate, travelers)} target="_blank" rel="noopener noreferrer" style={{ display: 'block', textAlign: 'center', padding: '14px', background: '#003580', color: '#fff', borderRadius: 12, fontSize: 15, fontWeight: 500, textDecoration: 'none' }}>
