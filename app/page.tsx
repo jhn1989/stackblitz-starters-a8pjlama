@@ -8,15 +8,10 @@ import { demoFlight, calculateTrip, fmt } from '../lib/pricing';
 type Step = 1 | 2 | 3 | 4;
 type SortBy = 'price-asc' | 'price-desc' | 'name';
 
-// Link builders: bake the user's choices straight into the URLs.
-// Booking.com carries dates + adults. Skyscanner carries dates + adults +
-// a direct-only filter. (Skyscanner has no URL setting for "1 stop max",
-// "cheapest" or "fastest" - those are chosen on Skyscanner's own page.)
-
 function toYYMMDD(d: string) {
   if (!d) return '';
-  const [y, m, day] = d.split('-');
-  return y.slice(2) + m + day;
+  const parts = d.split('-');
+  return parts[0].slice(2) + parts[1] + parts[2];
 }
 
 function buildSkyscannerUrl(
@@ -29,7 +24,7 @@ function buildSkyscannerUrl(
 ) {
   const o = (origin || 'CPH').toLowerCase();
   const de = (destCode || '').toLowerCase();
-  let path = `https://www.skyscanner.net/transport/flights/${o}/${de}/`;
+  let path = 'https://www.skyscanner.net/transport/flights/' + o + '/' + de + '/';
   const out = toYYMMDD(start);
   const inb = toYYMMDD(end);
   if (out) path += out + '/';
@@ -48,7 +43,7 @@ function buildBookingUrl(
   travelers: number
 ) {
   const params = new URLSearchParams();
-  params.set('ss', `${city}, ${country}`);
+  params.set('ss', city + ', ' + country);
   if (start) params.set('checkin', start);
   if (end) params.set('checkout', end);
   params.set('group_adults', String(travelers));
@@ -58,13 +53,16 @@ function buildBookingUrl(
 }
 
 function Flag({ code, size = 32 }: { code: string; size?: number }) {
+  const w = size;
+  const h = Math.round(size * 0.75);
+  const url = 'https://flagcdn.com/' + w + 'x' + h + '/' + code + '.png';
   return (
     <img
-      src={`https://flagcdn.com/${size}x${Math.round(size * 0.75)}/${code}.png`}
+      src={url}
       alt=""
       style={{
-        width: size,
-        height: Math.round(size * 0.75),
+        width: w,
+        height: h,
         borderRadius: 3,
         objectFit: 'cover',
         display: 'block',
@@ -106,27 +104,31 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  const themeEstimate = (dest: Destination) => {
+  function themeEstimate(dest: Destination) {
     const flight = demoFlight(origin || 'CPH', dest, startDate);
     return calculateTrip(dest, flight, startDate, endDate, travelers);
-  };
+  }
 
-  const estimateFlight = selectedDest
-    ? demoFlight(origin || 'CPH', selectedDest, startDate)
-    : null;
-  const estimate =
-    selectedDest && estimateFlight
-      ? {
-          flight: estimateFlight,
-          trip: calculateTrip(
-            selectedDest,
-            estimateFlight,
-            startDate,
-            endDate,
-            travelers
-          ),
-        }
-      : null;
+  let estimate: { flight: ReturnType<typeof demoFlight>; trip: ReturnType<typeof calculateTrip> } | null = null;
+  if (selectedDest) {
+    const ef = demoFlight(origin || 'CPH', selectedDest, startDate);
+    estimate = {
+      flight: ef,
+      trip: calculateTrip(selectedDest, ef, startDate, endDate, travelers),
+    };
+  }
+
+  function sortedDestinations(): Destination[] {
+    if (!selectedTheme) return [];
+    const list = selectedTheme.destinations.slice();
+    list.sort(function (a, b) {
+      if (sortBy === 'name') return a.city.localeCompare(b.city);
+      const ta = themeEstimate(a).total;
+      const tb = themeEstimate(b).total;
+      return sortBy === 'price-asc' ? ta - tb : tb - ta;
+    });
+    return list;
+  }
 
   return (
     <main style={{ minHeight: '100vh', background: '#F8F7F4' }}>
@@ -184,42 +186,37 @@ export default function Home() {
               display: 'flex',
             }}
           >
-            {(
-              [
-                'Trip details',
-                'Choose theme',
-                'Pick destination',
-                'Your estimate',
-              ] as const
-            ).map((label, i) => {
-              const stepNum = (i + 1) as Step;
-              const active = step === stepNum;
-              const done = step > stepNum;
-              return (
-                <button
-                  key={label}
-                  onClick={() => (done ? setStep(stepNum) : undefined)}
-                  style={{
-                    flex: 1,
-                    padding: '14px 8px',
-                    background: 'none',
-                    border: 'none',
-                    borderBottom: active
-                      ? '2px solid var(--accent)'
-                      : '2px solid transparent',
-                    fontSize: 13,
-                    fontWeight: active ? 500 : 400,
-                    color: active ? 'var(--accent)' : done ? '#555' : '#aaa',
-                    cursor: done ? 'pointer' : 'default',
-                    transition: 'all 0.15s',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {done && '✓ '}
-                  {label}
-                </button>
-              );
-            })}
+            {['Trip details', 'Choose theme', 'Pick destination', 'Your estimate'].map(
+              function (label, i) {
+                const stepNum = (i + 1) as Step;
+                const active = step === stepNum;
+                const done = step > stepNum;
+                return (
+                  <button
+                    key={label}
+                    onClick={() => (done ? setStep(stepNum) : undefined)}
+                    style={{
+                      flex: 1,
+                      padding: '14px 8px',
+                      background: 'none',
+                      border: 'none',
+                      borderBottom: active
+                        ? '2px solid var(--accent)'
+                        : '2px solid transparent',
+                      fontSize: 13,
+                      fontWeight: active ? 500 : 400,
+                      color: active ? 'var(--accent)' : done ? '#555' : '#aaa',
+                      cursor: done ? 'pointer' : 'default',
+                      transition: 'all 0.15s',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {done ? '✓ ' : ''}
+                    {label}
+                  </button>
+                );
+              }
+            )}
           </div>
         </div>
       )}
@@ -324,32 +321,30 @@ export default function Home() {
                 { city: 'Reykjavik', flag: 'is', price: '€3,200' },
                 { city: 'Budapest', flag: 'hu', price: '€760' },
                 { city: 'Bangkok', flag: 'th', price: '€1,800' },
-              ].map((d) => (
-                <div
-                  key={d.city}
-                  style={{
-                    background: 'rgba(255,255,255,0.12)',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    borderRadius: 12,
-                    padding: '10px 14px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                  }}
-                >
-                  <Flag code={d.flag} size={24} />
-                  <span
-                    style={{ fontSize: 13, color: '#fff', fontWeight: 500 }}
+              ].map(function (d) {
+                return (
+                  <div
+                    key={d.city}
+                    style={{
+                      background: 'rgba(255,255,255,0.12)',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      borderRadius: 12,
+                      padding: '10px 14px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                    }}
                   >
-                    {d.city}
-                  </span>
-                  <span
-                    style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}
-                  >
-                    {d.price}
-                  </span>
-                </div>
-              ))}
+                    <Flag code={d.flag} size={24} />
+                    <span style={{ fontSize: 13, color: '#fff', fontWeight: 500 }}>
+                      {d.city}
+                    </span>
+                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>
+                      {d.price}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -487,7 +482,7 @@ export default function Home() {
                   />
                 </div>
               </div>
-              {dateError && (
+              {dateError !== '' && (
                 <p style={{ color: '#dc2626', fontSize: 13, marginBottom: 12 }}>
                   {dateError}
                 </p>
@@ -506,7 +501,7 @@ export default function Home() {
                   fontWeight: 500,
                 }}
               >
-                Choose a travel theme →
+                Choose a travel theme
               </button>
             </div>
 
@@ -555,55 +550,53 @@ export default function Home() {
                     step: '4',
                     icon: '💶',
                     title: 'Get your estimate',
-                    desc: 'See a full breakdown and search live flights & hotels.',
+                    desc: 'See a full breakdown and search live flights and hotels.',
                   },
-                ].map((item) => (
-                  <div
-                    key={item.step}
-                    style={{
-                      background: '#fff',
-                      border: '1px solid #E8E6DF',
-                      borderRadius: 16,
-                      padding: '20px',
-                    }}
-                  >
+                ].map(function (item) {
+                  return (
                     <div
+                      key={item.step}
                       style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: '50%',
-                        background: 'var(--accent-light)',
-                        color: 'var(--accent)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 13,
-                        fontWeight: 600,
-                        marginBottom: 12,
+                        background: '#fff',
+                        border: '1px solid #E8E6DF',
+                        borderRadius: 16,
+                        padding: '20px',
                       }}
                     >
-                      {item.step}
+                      <div
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: '50%',
+                          background: 'var(--accent-light)',
+                          color: 'var(--accent)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 13,
+                          fontWeight: 600,
+                          marginBottom: 12,
+                        }}
+                      >
+                        {item.step}
+                      </div>
+                      <div style={{ fontSize: 22, marginBottom: 8 }}>{item.icon}</div>
+                      <div
+                        style={{
+                          fontSize: 15,
+                          fontWeight: 500,
+                          color: '#1a1a1a',
+                          marginBottom: 6,
+                        }}
+                      >
+                        {item.title}
+                      </div>
+                      <div style={{ fontSize: 13, color: '#888', lineHeight: 1.5 }}>
+                        {item.desc}
+                      </div>
                     </div>
-                    <div style={{ fontSize: 22, marginBottom: 8 }}>
-                      {item.icon}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 15,
-                        fontWeight: 500,
-                        color: '#1a1a1a',
-                        marginBottom: 6,
-                      }}
-                    >
-                      {item.title}
-                    </div>
-                    <div
-                      style={{ fontSize: 13, color: '#888', lineHeight: 1.5 }}
-                    >
-                      {item.desc}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -620,7 +613,7 @@ export default function Home() {
                 6 travel themes
               </h2>
               <p style={{ color: '#888', fontSize: 15, marginBottom: 28 }}>
-                Whatever mood you&apos;re in, we have destinations for it.
+                Whatever mood you are in, we have destinations for it.
               </p>
               <div
                 style={{
@@ -629,46 +622,34 @@ export default function Home() {
                   gap: 12,
                 }}
               >
-                {themes.map((theme) => (
-                  <button
-                    key={theme.id}
-                    onClick={() => {
-                      setSelectedTheme(theme);
-                      goStep2();
-                    }}
-                    style={{
-                      padding: '18px 14px',
-                      background: '#fff',
-                      border: '1px solid #E8E6DF',
-                      borderRadius: 14,
-                      textAlign: 'center',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s',
-                    }}
-                    onMouseEnter={(e) =>
-                      (e.currentTarget.style.borderColor = 'var(--accent)')
-                    }
-                    onMouseLeave={(e) =>
-                      (e.currentTarget.style.borderColor = '#E8E6DF')
-                    }
-                  >
-                    <div style={{ fontSize: 26, marginBottom: 8 }}>
-                      {theme.icon}
-                    </div>
-                    <div
+                {themes.map(function (theme) {
+                  return (
+                    <button
+                      key={theme.id}
+                      onClick={() => {
+                        setSelectedTheme(theme);
+                        goStep2();
+                      }}
                       style={{
-                        fontSize: 13,
-                        fontWeight: 500,
-                        color: '#1a1a1a',
+                        padding: '18px 14px',
+                        background: '#fff',
+                        border: '1px solid #E8E6DF',
+                        borderRadius: 14,
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s',
                       }}
                     >
-                      {theme.name}
-                    </div>
-                    <div style={{ fontSize: 11, color: '#aaa', marginTop: 3 }}>
-                      {theme.destinations.length} destinations
-                    </div>
-                  </button>
-                ))}
+                      <div style={{ fontSize: 26, marginBottom: 8 }}>{theme.icon}</div>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: '#1a1a1a' }}>
+                        {theme.name}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#aaa', marginTop: 3 }}>
+                        {theme.destinations.length} destinations
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -697,46 +678,41 @@ export default function Home() {
                 marginBottom: 32,
               }}
             >
-              {themes.map((theme) => (
-                <button
-                  key={theme.id}
-                  onClick={() => setSelectedTheme(theme)}
-                  style={{
-                    padding: '20px 22px',
-                    background:
-                      selectedTheme?.id === theme.id
-                        ? 'var(--accent-light)'
-                        : '#fff',
-                    border:
-                      selectedTheme?.id === theme.id
+              {themes.map(function (theme) {
+                const isSel = selectedTheme ? selectedTheme.id === theme.id : false;
+                return (
+                  <button
+                    key={theme.id}
+                    onClick={() => setSelectedTheme(theme)}
+                    style={{
+                      padding: '20px 22px',
+                      background: isSel ? 'var(--accent-light)' : '#fff',
+                      border: isSel
                         ? '2px solid var(--accent)'
                         : '1px solid #E2E0D8',
-                    borderRadius: 14,
-                    textAlign: 'left',
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  <div style={{ fontSize: 28, marginBottom: 8 }}>
-                    {theme.icon}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 16,
-                      fontWeight: 500,
-                      color: '#1a1a1a',
-                      marginBottom: 4,
+                      borderRadius: 14,
+                      textAlign: 'left',
+                      transition: 'all 0.15s',
                     }}
                   >
-                    {theme.name}
-                  </div>
-                  <div style={{ fontSize: 13, color: '#888' }}>
-                    {theme.desc}
-                  </div>
-                  <div style={{ fontSize: 12, color: '#aaa', marginTop: 6 }}>
-                    {theme.destinations.length} destinations
-                  </div>
-                </button>
-              ))}
+                    <div style={{ fontSize: 28, marginBottom: 8 }}>{theme.icon}</div>
+                    <div
+                      style={{
+                        fontSize: 16,
+                        fontWeight: 500,
+                        color: '#1a1a1a',
+                        marginBottom: 4,
+                      }}
+                    >
+                      {theme.name}
+                    </div>
+                    <div style={{ fontSize: 13, color: '#888' }}>{theme.desc}</div>
+                    <div style={{ fontSize: 12, color: '#aaa', marginTop: 6 }}>
+                      {theme.destinations.length} destinations
+                    </div>
+                  </button>
+                );
+              })}
             </div>
             <div style={{ display: 'flex', gap: 12 }}>
               <button
@@ -750,7 +726,7 @@ export default function Home() {
                   color: '#555',
                 }}
               >
-                ← Back
+                Back
               </button>
               <button
                 onClick={goStep3}
@@ -767,7 +743,7 @@ export default function Home() {
                   cursor: selectedTheme ? 'pointer' : 'not-allowed',
                 }}
               >
-                See destinations →
+                See destinations
               </button>
             </div>
           </div>
@@ -806,7 +782,6 @@ export default function Home() {
               Estimated total cost shown per trip.
             </p>
 
-            {/* Sort control */}
             <div
               style={{
                 display: 'flex',
@@ -850,105 +825,90 @@ export default function Home() {
                 marginBottom: 32,
               }}
             >
-              {[...selectedTheme.destinations]
-                .sort((a, b) => {
-                  if (sortBy === 'name') return a.city.localeCompare(b.city);
-                  const ta = themeEstimate(a).total;
-                  const tb = themeEstimate(b).total;
-                  return sortBy === 'price-asc' ? ta - tb : tb - ta;
-                })
-                .map((dest) => {
-                  const est = themeEstimate(dest);
-                  const isSelected = selectedDest?.city === dest.city;
-                  return (
-                    <button
-                      key={dest.city}
-                      onClick={() => setSelectedDest(dest)}
+              {sortedDestinations().map(function (dest) {
+                const est = themeEstimate(dest);
+                const isSelected = selectedDest
+                  ? selectedDest.city === dest.city
+                  : false;
+                const badgeBg =
+                  dest.costLevel === 'budget'
+                    ? '#D1FAE5'
+                    : dest.costLevel === 'mid'
+                    ? '#FEF3C7'
+                    : '#FCE7F3';
+                const badgeColor =
+                  dest.costLevel === 'budget'
+                    ? '#065F46'
+                    : dest.costLevel === 'mid'
+                    ? '#92400E'
+                    : '#831843';
+                const badgeText =
+                  dest.costLevel === 'budget'
+                    ? '💚 Budget'
+                    : dest.costLevel === 'mid'
+                    ? '🟡 Mid-range'
+                    : '💎 Premium';
+                return (
+                  <button
+                    key={dest.city}
+                    onClick={() => setSelectedDest(dest)}
+                    style={{
+                      padding: '18px 20px',
+                      background: isSelected ? 'var(--accent-light)' : '#fff',
+                      border: isSelected
+                        ? '2px solid var(--accent)'
+                        : '1px solid #E2E0D8',
+                      borderRadius: 14,
+                      textAlign: 'left',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    <div style={{ marginBottom: 10 }}>
+                      <Flag code={dest.flag} size={36} />
+                    </div>
+                    <div style={{ fontSize: 16, fontWeight: 500, color: '#1a1a1a' }}>
+                      {dest.city}
+                    </div>
+                    <div style={{ fontSize: 13, color: '#888', marginBottom: 8 }}>
+                      {dest.country}
+                    </div>
+                    <div
                       style={{
-                        padding: '18px 20px',
-                        background: isSelected
-                          ? 'var(--accent-light)'
-                          : '#fff',
-                        border: isSelected
-                          ? '2px solid var(--accent)'
-                          : '1px solid #E2E0D8',
-                        borderRadius: 14,
-                        textAlign: 'left',
-                        transition: 'all 0.15s',
+                        fontSize: 13,
+                        color: '#777',
+                        marginBottom: 10,
+                        lineHeight: 1.4,
                       }}
                     >
-                      <div style={{ marginBottom: 10 }}>
-                        <Flag code={dest.flag} size={36} />
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 16,
-                          fontWeight: 500,
-                          color: '#1a1a1a',
-                        }}
-                      >
-                        {dest.city}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 13,
-                          color: '#888',
-                          marginBottom: 8,
-                        }}
-                      >
-                        {dest.country}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 13,
-                          color: '#777',
-                          marginBottom: 10,
-                          lineHeight: 1.4,
-                        }}
-                      >
-                        {dest.description}
-                      </div>
-                      <div
-                        style={{
-                          display: 'inline-block',
-                          fontSize: 12,
-                          fontWeight: 600,
-                          padding: '3px 8px',
-                          borderRadius: 6,
-                          background:
-                            dest.costLevel === 'budget'
-                              ? '#D1FAE5'
-                              : dest.costLevel === 'mid'
-                              ? '#FEF3C7'
-                              : '#FCE7F3',
-                          color:
-                            dest.costLevel === 'budget'
-                              ? '#065F46'
-                              : dest.costLevel === 'mid'
-                              ? '#92400E'
-                              : '#831843',
-                          marginBottom: 8,
-                        }}
-                      >
-                        {dest.costLevel === 'budget'
-                          ? '💚 Budget'
-                          : dest.costLevel === 'mid'
-                          ? '🟡 Mid-range'
-                          : '💎 Premium'}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 14,
-                          fontWeight: 600,
-                          color: 'var(--accent)',
-                          marginTop: 4,
-                        }}
-                      >
-                        ~{fmt(est.total)} total
-                      </div>
-                    </button>
-                  );
-                })}
+                      {dest.description}
+                    </div>
+                    <div
+                      style={{
+                        display: 'inline-block',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        padding: '3px 8px',
+                        borderRadius: 6,
+                        background: badgeBg,
+                        color: badgeColor,
+                        marginBottom: 8,
+                      }}
+                    >
+                      {badgeText}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 600,
+                        color: 'var(--accent)',
+                        marginTop: 4,
+                      }}
+                    >
+                      ~{fmt(est.total)} total
+                    </div>
+                  </button>
+                );
+              })}
             </div>
             <div style={{ display: 'flex', gap: 12 }}>
               <button
@@ -962,7 +922,7 @@ export default function Home() {
                   color: '#555',
                 }}
               >
-                ← Back
+                Back
               </button>
               <button
                 onClick={goStep4}
@@ -979,7 +939,7 @@ export default function Home() {
                   cursor: selectedDest ? 'pointer' : 'not-allowed',
                 }}
               >
-                See full cost breakdown →
+                See full cost breakdown
               </button>
             </div>
           </div>
@@ -1015,30 +975,34 @@ export default function Home() {
               }}
             >
               {[
-                `✈️ From ${origin || 'CPH'}`,
+                '✈️ From ' + (origin || 'CPH'),
                 startDate
-                  ? `📅 ${startDate}${endDate ? ` → ${endDate}` : ''}`
+                  ? '📅 ' + startDate + (endDate ? ' to ' + endDate : '')
                   : '📅 Dates not set',
-                `👤 ${estimate.trip.travelers} traveler${
-                  estimate.trip.travelers > 1 ? 's' : ''
-                }`,
-                `🌙 ${estimate.trip.nights} night${
-                  estimate.trip.nights > 1 ? 's' : ''
-                }`,
-              ].map((pill) => (
-                <span
-                  key={pill}
-                  style={{
-                    fontSize: 13,
-                    padding: '5px 12px',
-                    background: '#EEECEA',
-                    borderRadius: 20,
-                    color: '#444',
-                  }}
-                >
-                  {pill}
-                </span>
-              ))}
+                '👤 ' +
+                  estimate.trip.travelers +
+                  ' traveler' +
+                  (estimate.trip.travelers > 1 ? 's' : ''),
+                '🌙 ' +
+                  estimate.trip.nights +
+                  ' night' +
+                  (estimate.trip.nights > 1 ? 's' : ''),
+              ].map(function (pill) {
+                return (
+                  <span
+                    key={pill}
+                    style={{
+                      fontSize: 13,
+                      padding: '5px 12px',
+                      background: '#EEECEA',
+                      borderRadius: 20,
+                      color: '#444',
+                    }}
+                  >
+                    {pill}
+                  </span>
+                );
+              })}
             </div>
             <div
               style={{
@@ -1062,10 +1026,8 @@ export default function Home() {
                 {fmt(estimate.trip.total)}
               </div>
               <div style={{ fontSize: 13, opacity: 0.7, marginTop: 8 }}>
-                {fmt(
-                  Math.round(estimate.trip.total / estimate.trip.travelers)
-                )}{' '}
-                per person · prices are estimates
+                {fmt(Math.round(estimate.trip.total / estimate.trip.travelers))} per
+                person, prices are estimates
               </div>
             </div>
             <div
@@ -1089,46 +1051,42 @@ export default function Home() {
               </h2>
               {[
                 {
-                  label: `✈️ Flights (${estimate.trip.travelers}× ${fmt(
-                    estimate.flight.price
-                  )})`,
+                  label:
+                    '✈️ Flights (' +
+                    estimate.trip.travelers +
+                    'x ' +
+                    fmt(estimate.flight.price) +
+                    ')',
                   value: estimate.trip.flightTotal,
                 },
                 {
-                  label: `🏨 Hotel (${estimate.trip.nights} nights)`,
+                  label: '🏨 Hotel (' + estimate.trip.nights + ' nights)',
                   value: estimate.trip.hotelTotal,
                 },
-                { label: '🍽️ Food & drink', value: estimate.trip.foodTotal },
-                {
-                  label: '🚌 Local transport',
-                  value: estimate.trip.transportTotal,
-                },
-                {
-                  label: '🎟️ Activities',
-                  value: estimate.trip.activitiesTotal,
-                },
-                {
-                  label: '🛡️ Safety buffer (8%)',
-                  value: estimate.trip.safetyBuffer,
-                },
-              ].map(({ label, value }) => (
-                <div
-                  key={label}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '10px 0',
-                    borderBottom: '1px solid #F0EEE8',
-                    fontSize: 14,
-                  }}
-                >
-                  <span style={{ color: '#555' }}>{label}</span>
-                  <span style={{ fontWeight: 500, color: '#1a1a1a' }}>
-                    {fmt(value)}
-                  </span>
-                </div>
-              ))}
+                { label: '🍽️ Food and drink', value: estimate.trip.foodTotal },
+                { label: '🚌 Local transport', value: estimate.trip.transportTotal },
+                { label: '🎟️ Activities', value: estimate.trip.activitiesTotal },
+                { label: '🛡️ Safety buffer (8%)', value: estimate.trip.safetyBuffer },
+              ].map(function (row) {
+                return (
+                  <div
+                    key={row.label}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '10px 0',
+                      borderBottom: '1px solid #F0EEE8',
+                      fontSize: 14,
+                    }}
+                  >
+                    <span style={{ color: '#555' }}>{row.label}</span>
+                    <span style={{ fontWeight: 500, color: '#1a1a1a' }}>
+                      {fmt(row.value)}
+                    </span>
+                  </div>
+                );
+              })}
               <div
                 style={{
                   display: 'flex',
@@ -1155,14 +1113,12 @@ export default function Home() {
             >
               <p style={{ fontSize: 13, color: '#92400E', lineHeight: 1.5 }}>
                 <strong>How we calculate this:</strong> Flight prices are sample
-                estimates based on typical routes - not real quotes. Hotel, food
-                and transport costs are researched averages for each
-                destination. Use this as a rough planning guide, then search
-                live prices below.
+                estimates based on typical routes, not real quotes. Hotel, food and
+                transport costs are researched averages for each destination. Use
+                this as a rough planning guide, then search live prices below.
               </p>
             </div>
 
-            {/* Flight preference: direct only (carries through to Skyscanner) */}
             <div
               style={{
                 background: '#fff',
@@ -1191,9 +1147,9 @@ export default function Home() {
                 Direct flights only
               </label>
               <p style={{ fontSize: 12, color: '#aaa', marginTop: 6 }}>
-                Skyscanner&apos;s own page handles stops, &quot;cheapest&quot;
-                and &quot;fastest&quot; sorting - your dates, travelers and this
-                direct-only choice are passed in automatically.
+                Skyscanner handles stops, cheapest and fastest sorting on its own
+                page. Your dates, travelers and this direct-only choice are passed in
+                automatically.
               </p>
             </div>
 
@@ -1228,7 +1184,7 @@ export default function Home() {
                   textDecoration: 'none',
                 }}
               >
-                ✈️ Search flights on Skyscanner ↗
+                ✈️ Search flights on Skyscanner
               </a>
               
                 href={buildBookingUrl(
@@ -1252,7 +1208,7 @@ export default function Home() {
                   textDecoration: 'none',
                 }}
               >
-                🏨 Find hotels on Booking.com ↗
+                🏨 Find hotels on Booking.com
               </a>
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
@@ -1268,7 +1224,7 @@ export default function Home() {
                   color: '#555',
                 }}
               >
-                ← Change destination
+                Change destination
               </button>
               <button
                 onClick={() => {
