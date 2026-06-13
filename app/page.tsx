@@ -2,28 +2,8 @@
 
 import { useState } from 'react';
 import { themes } from '../lib/destinations';
+import type { Destination, Theme } from '../lib/destinations';
 import { demoFlight, calculateTrip, fmt } from '../lib/pricing';
-
-type Destination = {
-  city: string;
-  country: string;
-  flag: string;
-  airportCode: string;
-  hotelNightEstimate: number;
-  foodPerDay: number;
-  transportPerDay: number;
-  activityPerDay: number;
-  costLevel: string;
-  description: string;
-};
-
-type Theme = {
-  id: string;
-  icon: string;
-  name: string;
-  desc: string;
-  destinations: Destination[];
-};
 
 type Step = 1 | 2 | 3 | 4;
 type SortBy = 'price-asc' | 'price-desc' | 'name';
@@ -290,7 +270,7 @@ export default function Home() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12 }}>
                 {themes.map(function (theme) {
                   return (
-                    <button key={theme.id} onClick={function () { setSelectedTheme(theme as Theme); goStep2(); }} style={{ padding: '18px 14px', background: '#fff', border: '1px solid #E8E6DF', borderRadius: 14, textAlign: 'center', cursor: 'pointer', transition: 'all 0.15s' }}>
+                    <button key={theme.id} onClick={function () { setSelectedTheme(theme); goStep2(); }} style={{ padding: '18px 14px', background: '#fff', border: '1px solid #E8E6DF', borderRadius: 14, textAlign: 'center', cursor: 'pointer', transition: 'all 0.15s' }}>
                       <div style={{ fontSize: 26, marginBottom: 8 }}>{theme.icon}</div>
                       <div style={{ fontSize: 13, fontWeight: 500, color: '#1a1a1a' }}>{theme.name}</div>
                       <div style={{ fontSize: 11, color: '#aaa', marginTop: 3 }}>{theme.destinations.length} destinations</div>
@@ -310,7 +290,7 @@ export default function Home() {
               {themes.map(function (theme) {
                 const isSel = selectedTheme ? selectedTheme.id === theme.id : false;
                 return (
-                  <button key={theme.id} onClick={function () { setSelectedTheme(theme as Theme); }} style={{ padding: '20px 22px', background: isSel ? 'var(--accent-light)' : '#fff', border: isSel ? '2px solid var(--accent)' : '1px solid #E2E0D8', borderRadius: 14, textAlign: 'left', transition: 'all 0.15s' }}>
+                  <button key={theme.id} onClick={function () { setSelectedTheme(theme); }} style={{ padding: '20px 22px', background: isSel ? 'var(--accent-light)' : '#fff', border: isSel ? '2px solid var(--accent)' : '1px solid #E2E0D8', borderRadius: 14, textAlign: 'left', transition: 'all 0.15s' }}>
                     <div style={{ fontSize: 28, marginBottom: 8 }}>{theme.icon}</div>
                     <div style={{ fontSize: 16, fontWeight: 500, color: '#1a1a1a', marginBottom: 4 }}>{theme.name}</div>
                     <div style={{ fontSize: 13, color: '#888' }}>{theme.desc}</div>
@@ -354,7 +334,7 @@ export default function Home() {
                 const badgeColor = dest.costLevel === 'budget' ? '#065F46' : dest.costLevel === 'mid' ? '#92400E' : '#831843';
                 const badgeText = dest.costLevel === 'budget' ? '💚 Budget' : dest.costLevel === 'mid' ? '🟡 Mid-range' : '💎 Premium';
                 return (
-                  <button key={dest.city} onClick={function () { setSelectedDest(dest as Destination); }} style={{ padding: '18px 20px', background: isSelected ? 'var(--accent-light)' : '#fff', border: isSelected ? '2px solid var(--accent)' : '1px solid #E2E0D8', borderRadius: 14, textAlign: 'left', transition: 'all 0.15s' }}>
+                  <button key={dest.city} onClick={function () { setSelectedDest(dest); }} style={{ padding: '18px 20px', background: isSelected ? 'var(--accent-light)' : '#fff', border: isSelected ? '2px solid var(--accent)' : '1px solid #E2E0D8', borderRadius: 14, textAlign: 'left', transition: 'all 0.15s' }}>
                     <div style={{ marginBottom: 10 }}><Flag code={dest.flag} size={36} /></div>
                     <div style={{ fontSize: 16, fontWeight: 500, color: '#1a1a1a' }}>{dest.city}</div>
                     <div style={{ fontSize: 13, color: '#888', marginBottom: 8 }}>{dest.country}</div>
