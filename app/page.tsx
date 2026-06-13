@@ -27,13 +27,15 @@ function buildSkyscannerUrl(
 ) {
   const o = (origin || 'CPH').toLowerCase();
   const de = (destCode || '').toLowerCase();
-  let path = 'https://www.skyscanner.net/transport/flights/' + o + '/' + de + '/';
   const out = toYYMMDD(start);
   const inb = toYYMMDD(end);
+  const adults = Math.max(1, travelers);
+  // adults count goes in the path, not just params
+  let path = 'https://www.skyscanner.net/transport/flights/' + o + '/' + de + '/';
   if (out) { path = path + out + '/'; }
   if (inb) { path = path + inb + '/'; }
+  path = path + adults + '/';
   const params = new URLSearchParams();
-  params.set('adults', String(travelers));
   params.set('currency', 'EUR');
   params.set('locale', 'en-GB');
   if (flightSort !== 'best') { params.set('sort', flightSort); }
