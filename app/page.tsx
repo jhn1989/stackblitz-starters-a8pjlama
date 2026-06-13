@@ -111,14 +111,22 @@ export default function Home() {
     return calculateTrip(dest, flight, startDate, endDate, travelers);
   };
 
-  const estimate = (() => {
-    if (!selectedDest) return null;
-    const flight = demoFlight(origin || 'CPH', selectedDest, startDate);
-    return {
-      flight,
-      trip: calculateTrip(selectedDest, flight, startDate, endDate, travelers),
-    };
-  })();
+  const estimateFlight = selectedDest
+    ? demoFlight(origin || 'CPH', selectedDest, startDate)
+    : null;
+  const estimate =
+    selectedDest && estimateFlight
+      ? {
+          flight: estimateFlight,
+          trip: calculateTrip(
+            selectedDest,
+            estimateFlight,
+            startDate,
+            endDate,
+            travelers
+          ),
+        }
+      : null;
 
   return (
     <main style={{ minHeight: '100vh', background: '#F8F7F4' }}>
