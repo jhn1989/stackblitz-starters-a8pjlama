@@ -2,8 +2,28 @@
 
 import { useState } from 'react';
 import { themes } from '../lib/destinations';
-import type { Destination, Theme } from '../lib/destinations';
 import { demoFlight, calculateTrip, fmt } from '../lib/pricing';
+
+type Destination = {
+  city: string;
+  country: string;
+  flag: string;
+  airportCode: string;
+  hotelNightEstimate: number;
+  foodPerDay: number;
+  transportPerDay: number;
+  activityPerDay: number;
+  costLevel: string;
+  description: string;
+};
+
+type Theme = {
+  id: string;
+  icon: string;
+  name: string;
+  desc: string;
+  destinations: Destination[];
+};
 
 type Step = 1 | 2 | 3 | 4;
 type SortBy = 'price-asc' | 'price-desc' | 'name';
@@ -77,10 +97,10 @@ function getSortedDestinations(
   const list = selectedTheme.destinations.slice();
   list.sort(function (a, b) {
     if (sortBy === 'name') { return a.city.localeCompare(b.city); }
-    const flight1 = demoFlight(origin || 'CPH', a, startDate);
-    const flight2 = demoFlight(origin || 'CPH', b, startDate);
-    const ta = calculateTrip(a, flight1, startDate, endDate, travelers).total;
-    const tb = calculateTrip(b, flight2, startDate, endDate, travelers).total;
+    const f1 = demoFlight(origin || 'CPH', a, startDate);
+    const f2 = demoFlight(origin || 'CPH', b, startDate);
+    const ta = calculateTrip(a, f1, startDate, endDate, travelers).total;
+    const tb = calculateTrip(b, f2, startDate, endDate, travelers).total;
     if (sortBy === 'price-asc') { return ta - tb; }
     return tb - ta;
   });
@@ -96,13 +116,7 @@ function Flag(props: { code: string; size?: number }) {
     <img
       src={url}
       alt=""
-      style={{
-        width: w,
-        height: h,
-        borderRadius: 3,
-        objectFit: 'cover',
-        display: 'block',
-      }}
+      style={{ width: w, height: h, borderRadius: 3, objectFit: 'cover', display: 'block' }}
     />
   );
 }
@@ -144,45 +158,12 @@ export default function Home() {
 
   return (
     <main style={{ minHeight: '100vh', background: '#F8F7F4' }}>
-      <header
-        style={{
-          background: '#fff',
-          borderBottom: '1px solid #E8E6DF',
-          padding: '0 24px',
-          position: 'sticky',
-          top: 0,
-          zIndex: 10,
-        }}
-      >
-        <div
-          style={{
-            maxWidth: 960,
-            margin: '0 auto',
-            display: 'flex',
-            alignItems: 'center',
-            height: 60,
-          }}
-        >
-          <span
-            style={{
-              fontFamily: 'var(--font-serif)',
-              fontSize: 22,
-              color: '#1a1a1a',
-              letterSpacing: '-0.3px',
-            }}
-          >
+      <header style={{ background: '#fff', borderBottom: '1px solid #E8E6DF', padding: '0 24px', position: 'sticky', top: 0, zIndex: 10 }}>
+        <div style={{ maxWidth: 960, margin: '0 auto', display: 'flex', alignItems: 'center', height: 60 }}>
+          <span style={{ fontFamily: 'var(--font-serif)', fontSize: 22, color: '#1a1a1a', letterSpacing: '-0.3px' }}>
             ✈ ThemeTrip
           </span>
-          <span
-            style={{
-              marginLeft: 12,
-              fontSize: 13,
-              color: '#888',
-              background: '#F0EFEA',
-              padding: '3px 10px',
-              borderRadius: 20,
-            }}
-          >
+          <span style={{ marginLeft: 12, fontSize: 13, color: '#888', background: '#F0EFEA', padding: '3px 10px', borderRadius: 20 }}>
             Beta
           </span>
         </div>
@@ -190,62 +171,32 @@ export default function Home() {
 
       {step > 1 && (
         <div style={{ background: '#fff', borderBottom: '1px solid #E8E6DF' }}>
-          <div
-            style={{
-              maxWidth: 960,
-              margin: '0 auto',
-              padding: '0 24px',
-              display: 'flex',
-            }}
-          >
-            {['Trip details', 'Choose theme', 'Pick destination', 'Your estimate'].map(
-              function (label, i) {
-                const stepNum = (i + 1) as Step;
-                const active = step === stepNum;
-                const done = step > stepNum;
-                return (
-                  <button
-                    key={label}
-                    onClick={function () { if (done) { setStep(stepNum); } }}
-                    style={{
-                      flex: 1,
-                      padding: '14px 8px',
-                      background: 'none',
-                      border: 'none',
-                      borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
-                      fontSize: 13,
-                      fontWeight: active ? 500 : 400,
-                      color: active ? 'var(--accent)' : done ? '#555' : '#aaa',
-                      cursor: done ? 'pointer' : 'default',
-                      transition: 'all 0.15s',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {done ? '✓ ' : ''}{label}
-                  </button>
-                );
-              }
-            )}
+          <div style={{ maxWidth: 960, margin: '0 auto', padding: '0 24px', display: 'flex' }}>
+            {['Trip details', 'Choose theme', 'Pick destination', 'Your estimate'].map(function (label, i) {
+              const stepNum = (i + 1) as Step;
+              const active = step === stepNum;
+              const done = step > stepNum;
+              return (
+                <button
+                  key={label}
+                  onClick={function () { if (done) { setStep(stepNum); } }}
+                  style={{ flex: 1, padding: '14px 8px', background: 'none', border: 'none', borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent', fontSize: 13, fontWeight: active ? 500 : 400, color: active ? 'var(--accent)' : done ? '#555' : '#aaa', cursor: done ? 'pointer' : 'default', transition: 'all 0.15s', whiteSpace: 'nowrap' }}
+                >
+                  {done ? '✓ ' : ''}{label}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
 
       {step === 1 && (
-        <div
-          style={{
-            background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 50%, #2563EB 100%)',
-            padding: '80px 0 0',
-            overflow: 'hidden',
-            position: 'relative',
-          }}
-        >
+        <div style={{ background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 50%, #2563EB 100%)', padding: '80px 0 0', overflow: 'hidden', position: 'relative' }}>
           <div style={{ position: 'absolute', top: -60, right: -60, width: 300, height: 300, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
           <div style={{ position: 'absolute', bottom: 40, left: -40, width: 200, height: 200, borderRadius: '50%', background: 'rgba(255,255,255,0.04)' }} />
           <div style={{ maxWidth: 960, margin: '0 auto', padding: '0 24px', position: 'relative' }}>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.15)', borderRadius: 20, padding: '6px 14px', marginBottom: 24 }}>
-              <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.9)', fontWeight: 500 }}>
-                ✨ 120 destinations across 6 themes
-              </span>
+              <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.9)', fontWeight: 500 }}>✨ 120 destinations across 6 themes</span>
             </div>
             <h1 style={{ fontFamily: 'var(--font-serif)', fontSize: 52, fontWeight: 400, color: '#fff', lineHeight: 1.15, marginBottom: 16, maxWidth: 620 }}>
               Find your perfect trip - with a real cost estimate
@@ -285,25 +236,12 @@ export default function Home() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 13, color: '#555', marginBottom: 6, fontWeight: 500 }}>Departure airport</label>
-                  <input
-                    type="text"
-                    value={origin}
-                    onChange={function (e) { setOrigin(e.target.value.toUpperCase()); }}
-                    placeholder="e.g. CPH"
-                    maxLength={4}
-                    style={{ textTransform: 'uppercase' }}
-                  />
+                  <input type="text" value={origin} onChange={function (e) { setOrigin(e.target.value.toUpperCase()); }} placeholder="e.g. CPH" maxLength={4} style={{ textTransform: 'uppercase' }} />
                   <p style={{ fontSize: 12, color: '#aaa', marginTop: 4 }}>3-letter IATA code</p>
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: 13, color: '#555', marginBottom: 6, fontWeight: 500 }}>Travelers</label>
-                  <input
-                    type="number"
-                    value={travelers}
-                    onChange={function (e) { setTravelers(Math.max(1, parseInt(e.target.value) || 1)); }}
-                    min={1}
-                    max={10}
-                  />
+                  <input type="number" value={travelers} onChange={function (e) { setTravelers(Math.max(1, parseInt(e.target.value) || 1)); }} min={1} max={10} />
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 8 }}>
@@ -319,10 +257,7 @@ export default function Home() {
               {dateError !== '' && (
                 <p style={{ color: '#dc2626', fontSize: 13, marginBottom: 12 }}>{dateError}</p>
               )}
-              <button
-                onClick={goStep2}
-                style={{ width: '100%', marginTop: 24, padding: '15px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 12, fontSize: 16, fontWeight: 500 }}
-              >
+              <button onClick={goStep2} style={{ width: '100%', marginTop: 24, padding: '15px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 12, fontSize: 16, fontWeight: 500 }}>
                 Choose a travel theme
               </button>
             </div>
@@ -339,9 +274,7 @@ export default function Home() {
                 ].map(function (item) {
                   return (
                     <div key={item.step} style={{ background: '#fff', border: '1px solid #E8E6DF', borderRadius: 16, padding: '20px' }}>
-                      <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--accent-light)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
-                        {item.step}
-                      </div>
+                      <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--accent-light)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, marginBottom: 12 }}>{item.step}</div>
                       <div style={{ fontSize: 22, marginBottom: 8 }}>{item.icon}</div>
                       <div style={{ fontSize: 15, fontWeight: 500, color: '#1a1a1a', marginBottom: 6 }}>{item.title}</div>
                       <div style={{ fontSize: 13, color: '#888', lineHeight: 1.5 }}>{item.desc}</div>
@@ -357,11 +290,7 @@ export default function Home() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12 }}>
                 {themes.map(function (theme) {
                   return (
-                    <button
-                      key={theme.id}
-                      onClick={function () { setSelectedTheme(theme); goStep2(); }}
-                      style={{ padding: '18px 14px', background: '#fff', border: '1px solid #E8E6DF', borderRadius: 14, textAlign: 'center', cursor: 'pointer', transition: 'all 0.15s' }}
-                    >
+                    <button key={theme.id} onClick={function () { setSelectedTheme(theme as Theme); goStep2(); }} style={{ padding: '18px 14px', background: '#fff', border: '1px solid #E8E6DF', borderRadius: 14, textAlign: 'center', cursor: 'pointer', transition: 'all 0.15s' }}>
                       <div style={{ fontSize: 26, marginBottom: 8 }}>{theme.icon}</div>
                       <div style={{ fontSize: 13, fontWeight: 500, color: '#1a1a1a' }}>{theme.name}</div>
                       <div style={{ fontSize: 11, color: '#aaa', marginTop: 3 }}>{theme.destinations.length} destinations</div>
@@ -381,11 +310,7 @@ export default function Home() {
               {themes.map(function (theme) {
                 const isSel = selectedTheme ? selectedTheme.id === theme.id : false;
                 return (
-                  <button
-                    key={theme.id}
-                    onClick={function () { setSelectedTheme(theme); }}
-                    style={{ padding: '20px 22px', background: isSel ? 'var(--accent-light)' : '#fff', border: isSel ? '2px solid var(--accent)' : '1px solid #E2E0D8', borderRadius: 14, textAlign: 'left', transition: 'all 0.15s' }}
-                  >
+                  <button key={theme.id} onClick={function () { setSelectedTheme(theme as Theme); }} style={{ padding: '20px 22px', background: isSel ? 'var(--accent-light)' : '#fff', border: isSel ? '2px solid var(--accent)' : '1px solid #E2E0D8', borderRadius: 14, textAlign: 'left', transition: 'all 0.15s' }}>
                     <div style={{ fontSize: 28, marginBottom: 8 }}>{theme.icon}</div>
                     <div style={{ fontSize: 16, fontWeight: 500, color: '#1a1a1a', marginBottom: 4 }}>{theme.name}</div>
                     <div style={{ fontSize: 13, color: '#888' }}>{theme.desc}</div>
@@ -396,11 +321,7 @@ export default function Home() {
             </div>
             <div style={{ display: 'flex', gap: 12 }}>
               <button onClick={function () { setStep(1); }} style={{ padding: '12px 20px', background: '#fff', border: '1px solid #E2E0D8', borderRadius: 10, fontSize: 14, color: '#555' }}>Back</button>
-              <button
-                onClick={goStep3}
-                disabled={!selectedTheme}
-                style={{ flex: 1, padding: '12px', background: selectedTheme ? 'var(--accent)' : '#E2E0D8', color: selectedTheme ? '#fff' : '#aaa', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 500, cursor: selectedTheme ? 'pointer' : 'not-allowed' }}
-              >
+              <button onClick={goStep3} disabled={!selectedTheme} style={{ flex: 1, padding: '12px', background: selectedTheme ? 'var(--accent)' : '#E2E0D8', color: selectedTheme ? '#fff' : '#aaa', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 500, cursor: selectedTheme ? 'pointer' : 'not-allowed' }}>
                 See destinations
               </button>
             </div>
@@ -416,35 +337,24 @@ export default function Home() {
             </div>
             <h1 style={{ fontFamily: 'var(--font-serif)', fontSize: 32, fontWeight: 400, marginBottom: 8 }}>Pick a destination</h1>
             <p style={{ color: '#666', fontSize: 15, marginBottom: 20 }}>Estimated total cost shown per trip.</p>
-
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24, flexWrap: 'wrap' }}>
               <label htmlFor="sortBy" style={{ fontSize: 13, color: '#555', fontWeight: 500 }}>Sort by</label>
-              <select
-                id="sortBy"
-                value={sortBy}
-                onChange={function (e) { setSortBy(e.target.value as SortBy); }}
-                style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid #E2E0D8', background: '#fff', fontSize: 14, color: '#1a1a1a', cursor: 'pointer' }}
-              >
+              <select id="sortBy" value={sortBy} onChange={function (e) { setSortBy(e.target.value as SortBy); }} style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid #E2E0D8', background: '#fff', fontSize: 14, color: '#1a1a1a', cursor: 'pointer' }}>
                 <option value="price-asc">Price: cheapest first</option>
                 <option value="price-desc">Price: most expensive first</option>
                 <option value="name">Name: A-Z</option>
               </select>
             </div>
-
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14, marginBottom: 32 }}>
               {sorted.map(function (dest) {
-                const flight = demoFlight(origin || 'CPH', dest, startDate);
-                const est = calculateTrip(dest, flight, startDate, endDate, travelers);
+                const fl = demoFlight(origin || 'CPH', dest, startDate);
+                const est = calculateTrip(dest, fl, startDate, endDate, travelers);
                 const isSelected = selectedDest ? selectedDest.city === dest.city : false;
                 const badgeBg = dest.costLevel === 'budget' ? '#D1FAE5' : dest.costLevel === 'mid' ? '#FEF3C7' : '#FCE7F3';
                 const badgeColor = dest.costLevel === 'budget' ? '#065F46' : dest.costLevel === 'mid' ? '#92400E' : '#831843';
                 const badgeText = dest.costLevel === 'budget' ? '💚 Budget' : dest.costLevel === 'mid' ? '🟡 Mid-range' : '💎 Premium';
                 return (
-                  <button
-                    key={dest.city}
-                    onClick={function () { setSelectedDest(dest); }}
-                    style={{ padding: '18px 20px', background: isSelected ? 'var(--accent-light)' : '#fff', border: isSelected ? '2px solid var(--accent)' : '1px solid #E2E0D8', borderRadius: 14, textAlign: 'left', transition: 'all 0.15s' }}
-                  >
+                  <button key={dest.city} onClick={function () { setSelectedDest(dest as Destination); }} style={{ padding: '18px 20px', background: isSelected ? 'var(--accent-light)' : '#fff', border: isSelected ? '2px solid var(--accent)' : '1px solid #E2E0D8', borderRadius: 14, textAlign: 'left', transition: 'all 0.15s' }}>
                     <div style={{ marginBottom: 10 }}><Flag code={dest.flag} size={36} /></div>
                     <div style={{ fontSize: 16, fontWeight: 500, color: '#1a1a1a' }}>{dest.city}</div>
                     <div style={{ fontSize: 13, color: '#888', marginBottom: 8 }}>{dest.country}</div>
@@ -457,11 +367,7 @@ export default function Home() {
             </div>
             <div style={{ display: 'flex', gap: 12 }}>
               <button onClick={function () { setStep(2); }} style={{ padding: '12px 20px', background: '#fff', border: '1px solid #E2E0D8', borderRadius: 10, fontSize: 14, color: '#555' }}>Back</button>
-              <button
-                onClick={goStep4}
-                disabled={!selectedDest}
-                style={{ flex: 1, padding: '12px', background: selectedDest ? 'var(--accent)' : '#E2E0D8', color: selectedDest ? '#fff' : '#aaa', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 500, cursor: selectedDest ? 'pointer' : 'not-allowed' }}
-              >
+              <button onClick={goStep4} disabled={!selectedDest} style={{ flex: 1, padding: '12px', background: selectedDest ? 'var(--accent)' : '#E2E0D8', color: selectedDest ? '#fff' : '#aaa', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 500, cursor: selectedDest ? 'pointer' : 'not-allowed' }}>
                 See full cost breakdown
               </button>
             </div>
@@ -492,9 +398,7 @@ export default function Home() {
             <div style={{ background: 'var(--accent)', borderRadius: 16, padding: '24px 28px', marginBottom: 20, color: '#fff' }}>
               <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 4 }}>Estimated total cost</div>
               <div style={{ fontFamily: 'var(--font-serif)', fontSize: 48, lineHeight: 1 }}>{fmt(estimate.trip.total)}</div>
-              <div style={{ fontSize: 13, opacity: 0.7, marginTop: 8 }}>
-                {fmt(Math.round(estimate.trip.total / estimate.trip.travelers))} per person, prices are estimates
-              </div>
+              <div style={{ fontSize: 13, opacity: 0.7, marginTop: 8 }}>{fmt(Math.round(estimate.trip.total / estimate.trip.travelers))} per person, prices are estimates</div>
             </div>
             <div style={{ background: '#fff', border: '1px solid #E8E6DF', borderRadius: 14, padding: '20px 24px', marginBottom: 20 }}>
               <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16, color: '#1a1a1a' }}>Cost breakdown</h2>
@@ -523,37 +427,20 @@ export default function Home() {
                 <strong>How we calculate this:</strong> Flight prices are sample estimates based on typical routes, not real quotes. Hotel, food and transport costs are researched averages for each destination. Use this as a rough planning guide, then search live prices below.
               </p>
             </div>
-
             <div style={{ background: '#fff', border: '1px solid #E8E6DF', borderRadius: 12, padding: '14px 16px', marginBottom: 12 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, color: '#1a1a1a', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={directOnly}
-                  onChange={function (e) { setDirectOnly(e.target.checked); }}
-                  style={{ width: 16, height: 16, cursor: 'pointer' }}
-                />
+                <input type="checkbox" checked={directOnly} onChange={function (e) { setDirectOnly(e.target.checked); }} style={{ width: 16, height: 16, cursor: 'pointer' }} />
                 Direct flights only
               </label>
               <p style={{ fontSize: 12, color: '#aaa', marginTop: 6 }}>
                 Skyscanner handles stops, cheapest and fastest sorting on its own page. Your dates, travelers and this direct-only choice are passed in automatically.
               </p>
             </div>
-
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
-              
-                href={buildSkyscannerUrl(origin || 'CPH', selectedDest.airportCode, startDate, endDate, travelers, directOnly)}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ display: 'block', textAlign: 'center', padding: '14px', background: '#0770E3', color: '#fff', borderRadius: 12, fontSize: 15, fontWeight: 500, textDecoration: 'none' }}
-              >
+              <a href={buildSkyscannerUrl(origin || 'CPH', selectedDest.airportCode, startDate, endDate, travelers, directOnly)} target="_blank" rel="noopener noreferrer" style={{ display: 'block', textAlign: 'center', padding: '14px', background: '#0770E3', color: '#fff', borderRadius: 12, fontSize: 15, fontWeight: 500, textDecoration: 'none' }}>
                 ✈️ Search flights on Skyscanner
               </a>
-              
-                href={buildBookingUrl(selectedDest.city, selectedDest.country, startDate, endDate, travelers)}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ display: 'block', textAlign: 'center', padding: '14px', background: '#003580', color: '#fff', borderRadius: 12, fontSize: 15, fontWeight: 500, textDecoration: 'none' }}
-              >
+              <a href={buildBookingUrl(selectedDest.city, selectedDest.country, startDate, endDate, travelers)} target="_blank" rel="noopener noreferrer" style={{ display: 'block', textAlign: 'center', padding: '14px', background: '#003580', color: '#fff', borderRadius: 12, fontSize: 15, fontWeight: 500, textDecoration: 'none' }}>
                 🏨 Find hotels on Booking.com
               </a>
             </div>
@@ -561,10 +448,7 @@ export default function Home() {
               <button onClick={function () { setStep(3); }} style={{ flex: 1, padding: '12px', background: '#fff', border: '1px solid #E2E0D8', borderRadius: 10, fontSize: 14, color: '#555' }}>
                 Change destination
               </button>
-              <button
-                onClick={function () { setStep(1); setSelectedTheme(null); setSelectedDest(null); }}
-                style={{ flex: 1, padding: '12px', background: '#fff', border: '1px solid #E2E0D8', borderRadius: 10, fontSize: 14, color: '#555' }}
-              >
+              <button onClick={function () { setStep(1); setSelectedTheme(null); setSelectedDest(null); }} style={{ flex: 1, padding: '12px', background: '#fff', border: '1px solid #E2E0D8', borderRadius: 10, fontSize: 14, color: '#555' }}>
                 Start over
               </button>
             </div>
