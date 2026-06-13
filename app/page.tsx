@@ -1,17 +1,61 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { themes } from '../lib/destinations';
 import type { Destination, Theme } from '../lib/destinations';
-import {
-  demoFlight,
-  calculateTrip,
-  fmt,
-  skyscannerLink,
-  bookingLink,
-} from '../lib/pricing';
+import { demoFlight, calculateTrip, fmt } from '../lib/pricing';
 
 type Step = 1 | 2 | 3 | 4;
+type SortBy = 'price-asc' | 'price-desc' | 'name';
+
+// Link builders: bake the user's choices straight into the URLs.
+// Booking.com carries dates + adults. Skyscanner carries dates + adults +
+// a direct-only filter. (Skyscanner has no URL setting for "1 stop max",
+// "cheapest" or "fastest" - those are chosen on Skyscanner's own page.)
+
+function toYYMMDD(d: string) {
+  if (!d) return '';
+  const [y, m, day] = d.split('-');
+  return y.slice(2) + m + day;
+}
+
+function buildSkyscannerUrl(
+  origin: string,
+  destCode: string,
+  start: string,
+  end: string,
+  travelers: number,
+  directOnly: boolean
+) {
+  const o = (origin || 'CPH').toLowerCase();
+  const de = (destCode || '').toLowerCase();
+  let path = `https://www.skyscanner.net/transport/flights/${o}/${de}/`;
+  const out = toYYMMDD(start);
+  const inb = toYYMMDD(end);
+  if (out) path += out + '/';
+  if (inb) path += inb + '/';
+  const params = new URLSearchParams();
+  params.set('adults', String(travelers));
+  if (directOnly) params.set('preferdirects', 'true');
+  return path + '?' + params.toString();
+}
+
+function buildBookingUrl(
+  city: string,
+  country: string,
+  start: string,
+  end: string,
+  travelers: number
+) {
+  const params = new URLSearchParams();
+  params.set('ss', `${city}, ${country}`);
+  if (start) params.set('checkin', start);
+  if (end) params.set('checkout', end);
+  params.set('group_adults', String(travelers));
+  params.set('no_rooms', '1');
+  params.set('group_children', '0');
+  return 'https://www.booking.com/searchresults.html?' + params.toString();
+}
 
 function Flag({ code, size = 32 }: { code: string; size?: number }) {
   return (
@@ -38,6 +82,8 @@ export default function Home() {
   const [selectedTheme, setSelectedTheme] = useState<Theme | null>(null);
   const [selectedDest, setSelectedDest] = useState<Destination | null>(null);
   const [dateError, setDateError] = useState('');
+  const [sortBy, setSortBy] = useState<SortBy>('price-asc');
+  const [directOnly, setDirectOnly] = useState(false);
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -60,19 +106,19 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  const estimate = useMemo(() => {
+  const themeEstimate = (dest: Destination) => {
+    const flight = demoFlight(origin || 'CPH', dest, startDate);
+    return calculateTrip(dest, flight, startDate, endDate, travelers);
+  };
+
+  const estimate = (() => {
     if (!selectedDest) return null;
     const flight = demoFlight(origin || 'CPH', selectedDest, startDate);
     return {
       flight,
       trip: calculateTrip(selectedDest, flight, startDate, endDate, travelers),
     };
-  }, [selectedDest, origin, startDate, endDate, travelers]);
-
-  const themeEstimate = (dest: Destination) => {
-    const flight = demoFlight(origin || 'CPH', dest, startDate);
-    return calculateTrip(dest, flight, startDate, endDate, travelers);
-  };
+  })();
 
   return (
     <main style={{ minHeight: '100vh', background: '#F8F7F4' }}>
@@ -242,7 +288,7 @@ export default function Home() {
                 maxWidth: 620,
               }}
             >
-              Find your perfect trip — with a real cost estimate
+              Find your perfect trip - with a real cost estimate
             </h1>
             <p
               style={{
@@ -566,7 +612,7 @@ export default function Home() {
                 6 travel themes
               </h2>
               <p style={{ color: '#888', fontSize: 15, marginBottom: 28 }}>
-                Whatever mood you're in, we have destinations for it.
+                Whatever mood you&apos;re in, we have destinations for it.
               </p>
               <div
                 style={{
@@ -748,9 +794,46 @@ export default function Home() {
             >
               Pick a destination
             </h1>
-            <p style={{ color: '#666', fontSize: 15, marginBottom: 28 }}>
+            <p style={{ color: '#666', fontSize: 15, marginBottom: 20 }}>
               Estimated total cost shown per trip.
             </p>
+
+            {/* Sort control */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                marginBottom: 24,
+                flexWrap: 'wrap',
+              }}
+            >
+              <label
+                htmlFor="sortBy"
+                style={{ fontSize: 13, color: '#555', fontWeight: 500 }}
+              >
+                Sort by
+              </label>
+              <select
+                id="sortBy"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortBy)}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: 10,
+                  border: '1px solid #E2E0D8',
+                  background: '#fff',
+                  fontSize: 14,
+                  color: '#1a1a1a',
+                  cursor: 'pointer',
+                }}
+              >
+                <option value="price-asc">Price: cheapest first</option>
+                <option value="price-desc">Price: most expensive first</option>
+                <option value="name">Name: A-Z</option>
+              </select>
+            </div>
+
             <div
               style={{
                 display: 'grid',
@@ -759,92 +842,105 @@ export default function Home() {
                 marginBottom: 32,
               }}
             >
-              {selectedTheme.destinations.map((dest) => {
-                const est = themeEstimate(dest);
-                const isSelected = selectedDest?.city === dest.city;
-                return (
-                  <button
-                    key={dest.city}
-                    onClick={() => setSelectedDest(dest)}
-                    style={{
-                      padding: '18px 20px',
-                      background: isSelected ? 'var(--accent-light)' : '#fff',
-                      border: isSelected
-                        ? '2px solid var(--accent)'
-                        : '1px solid #E2E0D8',
-                      borderRadius: 14,
-                      textAlign: 'left',
-                      transition: 'all 0.15s',
-                    }}
-                  >
-                    <div style={{ marginBottom: 10 }}>
-                      <Flag code={dest.flag} size={36} />
-                    </div>
-                    <div
+              {[...selectedTheme.destinations]
+                .sort((a, b) => {
+                  if (sortBy === 'name') return a.city.localeCompare(b.city);
+                  const ta = themeEstimate(a).total;
+                  const tb = themeEstimate(b).total;
+                  return sortBy === 'price-asc' ? ta - tb : tb - ta;
+                })
+                .map((dest) => {
+                  const est = themeEstimate(dest);
+                  const isSelected = selectedDest?.city === dest.city;
+                  return (
+                    <button
+                      key={dest.city}
+                      onClick={() => setSelectedDest(dest)}
                       style={{
-                        fontSize: 16,
-                        fontWeight: 500,
-                        color: '#1a1a1a',
+                        padding: '18px 20px',
+                        background: isSelected
+                          ? 'var(--accent-light)'
+                          : '#fff',
+                        border: isSelected
+                          ? '2px solid var(--accent)'
+                          : '1px solid #E2E0D8',
+                        borderRadius: 14,
+                        textAlign: 'left',
+                        transition: 'all 0.15s',
                       }}
                     >
-                      {dest.city}
-                    </div>
-                    <div
-                      style={{ fontSize: 13, color: '#888', marginBottom: 8 }}
-                    >
-                      {dest.country}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 13,
-                        color: '#777',
-                        marginBottom: 10,
-                        lineHeight: 1.4,
-                      }}
-                    >
-                      {dest.description}
-                    </div>
-                    <div
-                      style={{
-                        display: 'inline-block',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        padding: '3px 8px',
-                        borderRadius: 6,
-                        background:
-                          dest.costLevel === 'budget'
-                            ? '#D1FAE5'
-                            : dest.costLevel === 'mid'
-                            ? '#FEF3C7'
-                            : '#FCE7F3',
-                        color:
-                          dest.costLevel === 'budget'
-                            ? '#065F46'
-                            : dest.costLevel === 'mid'
-                            ? '#92400E'
-                            : '#831843',
-                        marginBottom: 8,
-                      }}
-                    >
-                      {dest.costLevel === 'budget'
-                        ? '💚 Budget'
-                        : dest.costLevel === 'mid'
-                        ? '🟡 Mid-range'
-                        : '💎 Premium'}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 14,
-                        fontWeight: 600,
-                        color: 'var(--accent)',
-                        marginTop: 4,
-                      }}
-                    >
-                      ~{fmt(est.total)} total
-                    </div>
-                  </button>
-                );
-              })}
+                      <div style={{ marginBottom: 10 }}>
+                        <Flag code={dest.flag} size={36} />
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 16,
+                          fontWeight: 500,
+                          color: '#1a1a1a',
+                        }}
+                      >
+                        {dest.city}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          color: '#888',
+                          marginBottom: 8,
+                        }}
+                      >
+                        {dest.country}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          color: '#777',
+                          marginBottom: 10,
+                          lineHeight: 1.4,
+                        }}
+                      >
+                        {dest.description}
+                      </div>
+                      <div
+                        style={{
+                          display: 'inline-block',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          padding: '3px 8px',
+                          borderRadius: 6,
+                          background:
+                            dest.costLevel === 'budget'
+                              ? '#D1FAE5'
+                              : dest.costLevel === 'mid'
+                              ? '#FEF3C7'
+                              : '#FCE7F3',
+                          color:
+                            dest.costLevel === 'budget'
+                              ? '#065F46'
+                              : dest.costLevel === 'mid'
+                              ? '#92400E'
+                              : '#831843',
+                          marginBottom: 8,
+                        }}
+                      >
+                        {dest.costLevel === 'budget'
+                          ? '💚 Budget'
+                          : dest.costLevel === 'mid'
+                          ? '🟡 Mid-range'
+                          : '💎 Premium'}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 600,
+                          color: 'var(--accent)',
+                          marginTop: 4,
+                        }}
+                      >
+                        ~{fmt(est.total)} total
+                      </div>
+                    </button>
+                  );
+                })}
             </div>
             <div style={{ display: 'flex', gap: 12 }}>
               <button
@@ -958,7 +1054,9 @@ export default function Home() {
                 {fmt(estimate.trip.total)}
               </div>
               <div style={{ fontSize: 13, opacity: 0.7, marginTop: 8 }}>
-                {fmt(Math.round(estimate.trip.total / estimate.trip.travelers))}{' '}
+                {fmt(
+                  Math.round(estimate.trip.total / estimate.trip.travelers)
+                )}{' '}
                 per person · prices are estimates
               </div>
             </div>
@@ -1049,12 +1147,48 @@ export default function Home() {
             >
               <p style={{ fontSize: 13, color: '#92400E', lineHeight: 1.5 }}>
                 <strong>How we calculate this:</strong> Flight prices are sample
-                estimates based on typical routes — not real quotes. Hotel, food
+                estimates based on typical routes - not real quotes. Hotel, food
                 and transport costs are researched averages for each
                 destination. Use this as a rough planning guide, then search
                 live prices below.
               </p>
             </div>
+
+            {/* Flight preference: direct only (carries through to Skyscanner) */}
+            <div
+              style={{
+                background: '#fff',
+                border: '1px solid #E8E6DF',
+                borderRadius: 12,
+                padding: '14px 16px',
+                marginBottom: 12,
+              }}
+            >
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  fontSize: 14,
+                  color: '#1a1a1a',
+                  cursor: 'pointer',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={directOnly}
+                  onChange={(e) => setDirectOnly(e.target.checked)}
+                  style={{ width: 16, height: 16, cursor: 'pointer' }}
+                />
+                Direct flights only
+              </label>
+              <p style={{ fontSize: 12, color: '#aaa', marginTop: 6 }}>
+                Skyscanner&apos;s own page handles stops, &quot;cheapest&quot;
+                and &quot;fastest&quot; sorting - your dates, travelers and this
+                direct-only choice are passed in automatically.
+              </p>
+            </div>
+
             <div
               style={{
                 display: 'flex',
@@ -1063,13 +1197,14 @@ export default function Home() {
                 marginBottom: 24,
               }}
             >
-              <a
-                href={skyscannerLink(
+              
+                href={buildSkyscannerUrl(
                   origin || 'CPH',
                   selectedDest.airportCode,
                   startDate,
                   endDate,
-                  travelers
+                  travelers,
+                  directOnly
                 )}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -1087,8 +1222,14 @@ export default function Home() {
               >
                 ✈️ Search flights on Skyscanner ↗
               </a>
-              <a
-                href={bookingLink(selectedDest, startDate, endDate, travelers)}
+              
+                href={buildBookingUrl(
+                  selectedDest.city,
+                  selectedDest.country,
+                  startDate,
+                  endDate,
+                  travelers
+                )}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{
@@ -1154,7 +1295,7 @@ export default function Home() {
           marginTop: 40,
         }}
       >
-        ThemeTrip — Prices are estimates only. Always verify before booking.
+        ThemeTrip - Prices are estimates only. Always verify before booking.
       </footer>
     </main>
   );
