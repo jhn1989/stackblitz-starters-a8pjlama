@@ -12,8 +12,10 @@ type StopsFilter = 'any' | 'direct' | '1stop';
 
 type LiveFlightMeta = {
   provider: string;
+  cheapestSource: string;
   pricePath: string;
   rawCount: number;
+  providerLink: string;
 };
 
 function buildSkyscannerUrl(
@@ -242,18 +244,6 @@ export default function Home() {
               messageParts.push('Input: ' + JSON.stringify(data.input));
             }
 
-            if (data.totalCandidates) {
-              messageParts.push(
-                'Total candidates: ' + JSON.stringify(data.totalCandidates).slice(0, 300)
-              );
-            }
-
-            if (data.perPersonCandidates) {
-              messageParts.push(
-                'Per-person candidates: ' + JSON.stringify(data.perPersonCandidates).slice(0, 300)
-              );
-            }
-
             throw new Error(
               messageParts.filter(Boolean).join(' | ') ||
                 'Could not fetch live flight price.'
@@ -277,9 +267,11 @@ export default function Home() {
 
           setLiveFlightFetchedAt(data.fetchedAt || '');
           setLiveFlightMeta({
-            provider: data.provider || 'Apify flight scraper',
+            provider: data.provider || 'Cheapest provider',
+            cheapestSource: data.cheapestSource || data.provider || '',
             pricePath: data.pricePath || '',
             rawCount: data.rawCount || 0,
+            providerLink: data.providerLink || '',
           });
         } catch (error) {
           setLiveFlightError(
@@ -322,6 +314,21 @@ export default function Home() {
   const displayedPerPerson = estimate
     ? Math.round(displayedTripTotal / estimate.trip.travelers)
     : 0;
+
+  const cheapestLiveFlightUrl =
+    liveFlightMeta && liveFlightMeta.providerLink
+      ? liveFlightMeta.providerLink
+      : selectedDest && estimate
+      ? buildSkyscannerUrl(
+          origin || 'CPH',
+          selectedDest.airportCode,
+          startDate,
+          endDate,
+          travelers,
+          flightSort,
+          stopsFilter
+        )
+      : '#';
 
   function goStep2() {
     if (startDate && endDate && new Date(endDate) <= new Date(startDate)) {
@@ -1321,7 +1328,7 @@ export default function Home() {
               </div>
               <div style={{ fontSize: 13, opacity: 0.7, marginTop: 8 }}>
                 {fmt(displayedPerPerson)} per person,{' '}
-                {liveFlightPrice ? 'flight price is live' : 'prices are estimates'}
+                {liveFlightPrice ? 'cheapest live result found' : 'prices are estimates'}
               </div>
             </div>
 
@@ -1353,7 +1360,7 @@ export default function Home() {
                     'x ' +
                     fmt(displayedFlightPrice) +
                     ')' +
-                    (liveFlightPrice ? ' - live' : ' - estimate'),
+                    (liveFlightPrice ? ' - cheapest live result found' : ' - estimate'),
                   value: displayedFlightTotal,
                 },
                 {
@@ -1414,15 +1421,14 @@ export default function Home() {
 
               {liveFlightLoading && (
                 <p style={{ fontSize: 12, color: '#666', marginTop: 10 }}>
-                  Fetching latest flight price...
+                  Fetching cheapest live result...
                 </p>
               )}
 
               {liveFlightMeta && (
                 <p style={{ fontSize: 12, color: '#666', marginTop: 10 }}>
-                  Live source: {liveFlightMeta.provider}. Price field:{' '}
-                  {liveFlightMeta.pricePath || 'not provided'}. Results:{' '}
-                  {liveFlightMeta.rawCount}.
+                  Cheapest live result found via {liveFlightMeta.cheapestSource || liveFlightMeta.provider}.
+                  Results checked: {liveFlightMeta.rawCount}.
                 </p>
               )}
 
@@ -1451,10 +1457,11 @@ export default function Home() {
               }}
             >
               <p style={{ fontSize: 13, color: '#92400E', lineHeight: 1.5 }}>
-                <strong>How we calculate this:</strong> Flight prices are sample
-                estimates based on typical routes, not real quotes. Hotel, food
-                and transport costs are researched averages for each destination.
-                Use this as a rough planning guide, then search live prices below.
+                <strong>How we calculate this:</strong> Live flight prices come
+                from the cheapest provider result returned by our flight data
+                source. Hotel, food and transport costs are researched averages
+                for each destination. Use this as a planning guide and always
+                verify the final booking price before payment.
               </p>
             </div>
 
@@ -1475,7 +1482,7 @@ export default function Home() {
                   marginBottom: 12,
                 }}
               >
-                Flight preferences for Skyscanner
+                Flight preferences
               </p>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -1582,6 +1589,25 @@ export default function Home() {
               }}
             >
               <a
+                href={cheapestLiveFlightUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'block',
+                  textAlign: 'center',
+                  padding: '14px',
+                  background: '#0770E3',
+                  color: '#fff',
+                  borderRadius: 12,
+                  fontSize: 15,
+                  fontWeight: 500,
+                  textDecoration: 'none',
+                }}
+              >
+                ✈️ View cheapest live flight
+              </a>
+
+              <a
                 href={buildSkyscannerUrl(
                   origin || 'CPH',
                   selectedDest.airportCode,
@@ -1597,15 +1623,16 @@ export default function Home() {
                   display: 'block',
                   textAlign: 'center',
                   padding: '14px',
-                  background: '#0770E3',
-                  color: '#fff',
+                  background: '#fff',
+                  color: '#0770E3',
+                  border: '1px solid #0770E3',
                   borderRadius: 12,
                   fontSize: 15,
                   fontWeight: 500,
                   textDecoration: 'none',
                 }}
               >
-                ✈️ Search flights on Skyscanner
+                Compare flights on Skyscanner
               </a>
 
               <a
