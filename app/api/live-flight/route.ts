@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+const ROUTE_VERSION = 'live-flight-route-v6-bestprice-correct-input';
+
 type LiveFlightRequest = {
   origin: string;
   destination: string;
@@ -189,6 +191,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error: 'Missing APIFY_TOKEN in Vercel environment variables.',
+          routeVersion: ROUTE_VERSION,
         },
         { status: 500 }
       );
@@ -198,6 +201,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error: 'Missing APIFY_FLIGHT_ACTOR_ID in Vercel environment variables.',
+          routeVersion: ROUTE_VERSION,
         },
         { status: 500 }
       );
@@ -208,6 +212,7 @@ export async function POST(request: Request) {
         {
           error: 'Missing required flight search fields.',
           received: body,
+          routeVersion: ROUTE_VERSION,
         },
         { status: 400 }
       );
@@ -252,6 +257,7 @@ export async function POST(request: Request) {
           status: response.status,
           input,
           details: text,
+          routeVersion: ROUTE_VERSION,
         },
         { status: 500 }
       );
@@ -265,6 +271,7 @@ export async function POST(request: Request) {
           error: 'Apify returned data, but it was not an array.',
           input,
           raw: items,
+          routeVersion: ROUTE_VERSION,
         },
         { status: 500 }
       );
@@ -275,6 +282,7 @@ export async function POST(request: Request) {
         {
           error: 'Apify returned zero results.',
           input,
+          routeVersion: ROUTE_VERSION,
         },
         { status: 404 }
       );
@@ -289,6 +297,7 @@ export async function POST(request: Request) {
           input,
           rawCount: items.length,
           sample: items.slice(0, 3),
+          routeVersion: ROUTE_VERSION,
         },
         { status: 404 }
       );
@@ -309,6 +318,7 @@ export async function POST(request: Request) {
           rawCount: items.length,
           selectedItem: result.selectedItem,
           sample: items.slice(0, 3),
+          routeVersion: ROUTE_VERSION,
         },
         { status: 422 }
       );
@@ -325,12 +335,14 @@ export async function POST(request: Request) {
       rawCount: items.length,
       input,
       selectedItem: result.selectedItem,
+      routeVersion: ROUTE_VERSION,
     });
   } catch (error) {
     return NextResponse.json(
       {
         error: 'Unexpected error while fetching live flight price.',
         details: error instanceof Error ? error.message : String(error),
+        routeVersion: ROUTE_VERSION,
       },
       { status: 500 }
     );
