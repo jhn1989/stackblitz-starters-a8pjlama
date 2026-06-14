@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const ROUTE_VERSION = 'live-flight-route-v8-post-fixed-correct-input';
+const ROUTE_VERSION = 'live-flight-route-v9-provider-link';
 
 type LiveFlightRequest = {
   origin: string;
@@ -24,6 +24,9 @@ type ApifyFlightItem = {
     norwegian?: number | string;
     [key: string]: unknown;
   };
+  cheapestSource?: string;
+  sourcesFound?: string[];
+  currency?: string;
   duration?: string;
   stops?: number;
   from?: {
@@ -39,6 +42,8 @@ type ApifyFlightItem = {
     book?: string | null;
     [key: string]: unknown;
   };
+  origin?: string;
+  destination?: string;
   departDate?: string;
   returnDate?: string;
   [key: string]: unknown;
@@ -65,6 +70,39 @@ function parsePrice(value: unknown): number | null {
 
 function normalizeAirport(value: string) {
   return value.trim().toUpperCase();
+}
+
+function getBestProviderLink(item: ApifyFlightItem | null): string {
+  if (!item || !item.links) {
+    return '';
+  }
+
+  const cheapestSource = String(item.cheapestSource || '').toLowerCase();
+
+  if (cheapestSource && item.links[cheapestSource]) {
+    const link = item.links[cheapestSource];
+
+    if (typeof link === 'string' && link.trim()) {
+      return link;
+    }
+  }
+
+  if (typeof item.links.kiwi === 'string' && item.links.kiwi.trim()) {
+    return item.links.kiwi;
+  }
+
+  if (typeof item.links.book === 'string' && item.links.book.trim()) {
+    return item.links.book;
+  }
+
+  if (
+    typeof item.links.googleFlights === 'string' &&
+    item.links.googleFlights.trim()
+  ) {
+    return item.links.googleFlights;
+  }
+
+  return '';
 }
 
 function findBestPricePerPerson(items: ApifyFlightItem[]): {
@@ -134,8 +172,12 @@ function validateReturnedRoute(
     };
   }
 
-  const returnedOrigin = normalizeAirport(item.from?.airport || '');
-  const returnedDestination = normalizeAirport(item.to?.airport || '');
+  const returnedOrigin = normalizeAirport(
+    item.from?.airport || item.origin || ''
+  );
+  const returnedDestination = normalizeAirport(
+    item.to?.airport || item.destination || ''
+  );
   const returnedDate = String(item.departDate || '');
 
   if (returnedOrigin && returnedOrigin !== origin) {
@@ -185,7 +227,7 @@ export async function GET() {
     ok: true,
     routeVersion: ROUTE_VERSION,
     message:
-      'This is the active live-flight API route. GET and POST are both from v8.',
+      'This is the active live-flight API route. GET and POST are both from v9.',
   });
 }
 
@@ -333,12 +375,22 @@ export async function POST(request: Request) {
       );
     }
 
+    const providerLink = getBestProviderLink(result.selectedItem);
+
     return NextResponse.json({
       pricePerPerson: Math.round(result.pricePerPerson),
       totalFlightPrice: Math.round(result.pricePerPerson * travelers),
-      currency: 'EUR',
+      currency: result.selectedItem.currency || 'EUR',
       source: 'apify',
-      provider: result.selectedItem.airline || 'Apify flight scraper',
+      provider:
+        result.selectedItem.cheapestSource ||
+        result.selectedItem.airline ||
+        'Cheapest provider',
+      cheapestSource:
+        result.selectedItem.cheapestSource ||
+        result.priceSource ||
+        'bestPrice',
+      providerLink: providerLink,
       pricePath: result.priceSource,
       fetchedAt: new Date().toISOString(),
       rawCount: items.length,
