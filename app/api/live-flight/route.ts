@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const ROUTE_VERSION = 'live-flight-route-v7-correct-apify-input-bestprice';
+const ROUTE_VERSION = 'live-flight-route-v8-post-fixed-correct-input';
 
 type LiveFlightRequest = {
   origin: string;
@@ -185,7 +185,7 @@ export async function GET() {
     ok: true,
     routeVersion: ROUTE_VERSION,
     message:
-      'This is the active live-flight API route. If you can see this version, Vercel deployed the correct route.ts file.',
+      'This is the active live-flight API route. GET and POST are both from v8.',
   });
 }
 
