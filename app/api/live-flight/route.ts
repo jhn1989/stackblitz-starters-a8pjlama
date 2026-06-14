@@ -8,12 +8,17 @@ type LiveFlightRequest = {
   travelers: number;
 };
 
-type PriceCandidate = {
-  value: number;
-  path: string;
+type NormalizedFlightPrice = {
+  pricePerPerson: number;
+  totalPrice: number;
+  provider: string;
+  currency: string;
+  title: string;
+  rawIndex: number;
+  pricePath: string;
 };
 
-function parsePriceValue(value: unknown): number | null {
+function parsePrice(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
     return value;
   }
@@ -22,27 +27,13 @@ function parsePriceValue(value: unknown): number | null {
     return null;
   }
 
-  const trimmed = value.trim();
+  const original = value.trim();
 
-  if (!trimmed) {
+  if (!original) {
     return null;
   }
 
-  const hasCurrencySymbol =
-    trimmed.includes('€') ||
-    trimmed.includes('$') ||
-    trimmed.includes('£') ||
-    trimmed.toLowerCase().includes('eur') ||
-    trimmed.toLowerCase().includes('usd') ||
-    trimmed.toLowerCase().includes('gbp');
-
-  const hasPriceLikeNumber = /\d/.test(trimmed);
-
-  if (!hasPriceLikeNumber) {
-    return null;
-  }
-
-  let cleaned = trimmed.replace(/[^\d.,]/g, '');
+  let cleaned = original.replace(/[^\d.,]/g, '');
 
   if (!cleaned) {
     return null;
@@ -78,141 +69,437 @@ function parsePriceValue(value: unknown): number | null {
     return null;
   }
 
-  if (!hasCurrencySymbol && parsed < 20) {
-    return null;
-  }
-
   return parsed;
 }
 
-function isPricePath(path: string): boolean {
-  const lower = path.toLowerCase();
+function getString(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    return String(value);
+  }
+
+  return '';
+}
+
+function getNestedValue(obj: any, path: string): unknown {
+  const parts = path.split('.');
+  let current = obj;
+
+  for (const part of parts) {
+    if (current === null || current === undefined) {
+      return undefined;
+    }
+
+    current = current[part];
+  }
+
+  return current;
+}
+
+function getProvider(item: any): string {
+  const providerFields = [
+    item.provider,
+    item.source,
+    item.site,
+    item.agency,
+    item.vendor,
+    item.airline,
+    item.airlines,
+    item.carrier,
+    item.carriers,
+    item.bookingSite,
+    item.booking_site,
+    item.name,
+  ];
+
+  for (const field of providerFields) {
+    if (typeof field === 'string' && field.trim()) {
+      return field.trim();
+    }
+
+    if (Array.isArray(field) && field.length > 0) {
+      return field.map(function (x) {
+        return getString(x);
+      }).filter(Boolean).join(', ');
+    }
+  }
+
+  return 'Unknown provider';
+}
+
+function getTitle(item: any): string {
+  const titleFields = [
+    item.title,
+    item.name,
+    item.description,
+    item.route,
+    item.summary,
+    item.flight,
+    item.flights,
+  ];
+
+  for (const field of titleFields) {
+    if (typeof field === 'string' && field.trim()) {
+      return field.trim();
+    }
+  }
+
+  return 'Flight result';
+}
+
+function getCurrency(item: any): string {
+  const currencyFields = [
+    item.currency,
+    item.priceCurrency,
+    item.price_currency,
+    item.totalCurrency,
+    item.price?.currency,
+    item.price?.currencyCode,
+    item.price?.currency_code,
+  ];
+
+  for (const field of currencyFields) {
+    if (typeof field === 'string' && field.trim()) {
+      return field.trim().toUpperCase();
+    }
+  }
+
+  return 'EUR';
+}
+
+function hasRoundTripSignal(item: any): boolean {
+  const text = JSON.stringify(item).toLowerCase();
 
   return (
-    lower.includes('price') ||
-    lower.includes('amount') ||
-    lower.includes('fare') ||
-    lower.includes('cost') ||
-    lower.includes('total')
+    text.includes('return') ||
+    text.includes('round') ||
+    text.includes('roundtrip') ||
+    text.includes('round_trip') ||
+    text.includes('inbound') ||
+    text.includes('outbound') ||
+    text.includes('two-way') ||
+    text.includes('2 way') ||
+    text.includes('flightback') ||
+    text.includes('backflight')
   );
 }
 
-function collectPriceCandidates(
+function normalizeCandidateFromTotal(
+  item: any,
+  rawIndex: number,
+  travelers: number,
+  total: number,
+  pricePath: string
+): NormalizedFlightPrice | null {
+  if (!Number.isFinite(total) || total <= 0) {
+    return null;
+  }
+
+  const pricePerPerson = total / Math.max(1, travelers);
+
+  if (pricePerPerson < 100 || pricePerPerson > 10000) {
+    return null;
+  }
+
+  return {
+    pricePerPerson,
+    totalPrice: total,
+    provider: getProvider(item),
+    currency: getCurrency(item),
+    title: getTitle(item),
+    rawIndex,
+    pricePath,
+  };
+}
+
+function normalizeCandidateFromPerPerson(
+  item: any,
+  rawIndex: number,
+  travelers: number,
+  pricePerPerson: number,
+  pricePath: string
+): NormalizedFlightPrice | null {
+  if (!Number.isFinite(pricePerPerson) || pricePerPerson <= 0) {
+    return null;
+  }
+
+  if (pricePerPerson < 100 || pricePerPerson > 10000) {
+    return null;
+  }
+
+  return {
+    pricePerPerson,
+    totalPrice: pricePerPerson * Math.max(1, travelers),
+    provider: getProvider(item),
+    currency: getCurrency(item),
+    title: getTitle(item),
+    rawIndex,
+    pricePath,
+  };
+}
+
+function findExplicitPriceCandidates(
+  item: any,
+  rawIndex: number,
+  travelers: number
+): NormalizedFlightPrice[] {
+  const candidates: NormalizedFlightPrice[] = [];
+
+  const totalPricePaths = [
+    'totalPrice',
+    'total_price',
+    'totalAmount',
+    'total_amount',
+    'priceTotal',
+    'price_total',
+    'grandTotal',
+    'grand_total',
+    'amountTotal',
+    'amount_total',
+    'price.total',
+    'price.totalPrice',
+    'price.total_price',
+    'price.totalAmount',
+    'price.total_amount',
+    'price.grandTotal',
+    'price.grand_total',
+    'pricing.total',
+    'pricing.totalPrice',
+    'pricing.total_price',
+    'fare.total',
+    'fare.totalPrice',
+    'fare.total_price',
+    'fares.total',
+    'fares.totalPrice',
+    'fares.total_price',
+  ];
+
+  const perPersonPricePaths = [
+    'pricePerPerson',
+    'price_per_person',
+    'perPersonPrice',
+    'per_person_price',
+    'pricePerAdult',
+    'price_per_adult',
+    'adultPrice',
+    'adult_price',
+    'price',
+    'priceAmount',
+    'price_amount',
+    'amount',
+    'value',
+    'fare',
+    'farePrice',
+    'fare_price',
+    'price.amount',
+    'price.value',
+    'price.raw',
+    'price.formatted',
+    'pricing.price',
+    'pricing.amount',
+    'pricing.value',
+    'fare.price',
+    'fare.amount',
+    'fare.value',
+  ];
+
+  for (const path of totalPricePaths) {
+    const parsed = parsePrice(getNestedValue(item, path));
+
+    if (parsed !== null) {
+      const candidate = normalizeCandidateFromTotal(
+        item,
+        rawIndex,
+        travelers,
+        parsed,
+        path
+      );
+
+      if (candidate) {
+        candidates.push(candidate);
+      }
+    }
+  }
+
+  for (const path of perPersonPricePaths) {
+    const parsed = parsePrice(getNestedValue(item, path));
+
+    if (parsed !== null) {
+      const candidate = normalizeCandidateFromPerPerson(
+        item,
+        rawIndex,
+        travelers,
+        parsed,
+        path
+      );
+
+      if (candidate) {
+        candidates.push(candidate);
+      }
+    }
+  }
+
+  return candidates;
+}
+
+function findDeepTotalCandidates(
   value: unknown,
+  rawIndex: number,
+  travelers: number,
+  item: any,
   path: string,
-  results: PriceCandidate[]
+  candidates: NormalizedFlightPrice[]
 ) {
   if (value === null || value === undefined) {
     return;
   }
 
   if (typeof value === 'string' || typeof value === 'number') {
-    if (isPricePath(path)) {
-      const parsed = parsePriceValue(value);
+    const lowerPath = path.toLowerCase();
 
-      if (parsed !== null) {
-        results.push({
-          value: parsed,
-          path,
-        });
-      }
+    const looksLikeFullTotal =
+      lowerPath.includes('totalprice') ||
+      lowerPath.includes('total_price') ||
+      lowerPath.includes('totalamount') ||
+      lowerPath.includes('total_amount') ||
+      lowerPath.endsWith('.total') ||
+      lowerPath.includes('.total.');
+
+    if (!looksLikeFullTotal) {
+      return;
+    }
+
+    const parsed = parsePrice(value);
+
+    if (parsed === null) {
+      return;
+    }
+
+    const candidate = normalizeCandidateFromTotal(
+      item,
+      rawIndex,
+      travelers,
+      parsed,
+      path
+    );
+
+    if (candidate) {
+      candidates.push(candidate);
     }
 
     return;
   }
 
   if (Array.isArray(value)) {
-    value.forEach(function (item, index) {
-      collectPriceCandidates(item, path + '[' + index + ']', results);
+    value.forEach(function (child, index) {
+      findDeepTotalCandidates(
+        child,
+        rawIndex,
+        travelers,
+        item,
+        path + '[' + index + ']',
+        candidates
+      );
     });
 
     return;
   }
 
   if (typeof value === 'object') {
-    Object.entries(value as Record<string, unknown>).forEach(function ([key, item]) {
+    Object.entries(value as Record<string, unknown>).forEach(function ([key, child]) {
       const nextPath = path ? path + '.' + key : key;
-      collectPriceCandidates(item, nextPath, results);
+
+      findDeepTotalCandidates(
+        child,
+        rawIndex,
+        travelers,
+        item,
+        nextPath,
+        candidates
+      );
     });
   }
 }
 
-function findBestPricePerPerson(items: unknown[], travelers: number): {
-  pricePerPerson: number | null;
-  debugCandidates: PriceCandidate[];
+function dedupeCandidates(
+  candidates: NormalizedFlightPrice[]
+): NormalizedFlightPrice[] {
+  const seen = new Set<string>();
+  const result: NormalizedFlightPrice[] = [];
+
+  for (const candidate of candidates) {
+    const key =
+      Math.round(candidate.pricePerPerson) +
+      '|' +
+      Math.round(candidate.totalPrice) +
+      '|' +
+      candidate.provider +
+      '|' +
+      candidate.pricePath;
+
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(candidate);
+    }
+  }
+
+  return result;
+}
+
+function chooseBestCandidate(
+  items: any[],
+  travelers: number
+): {
+  selected: NormalizedFlightPrice | null;
+  candidates: NormalizedFlightPrice[];
 } {
-  const candidates: PriceCandidate[] = [];
+  let allCandidates: NormalizedFlightPrice[] = [];
 
-  collectPriceCandidates(items, 'items', candidates);
+  items.forEach(function (item, index) {
+    const explicitCandidates = findExplicitPriceCandidates(item, index, travelers);
+    const deepTotalCandidates: NormalizedFlightPrice[] = [];
 
-  const filtered = candidates.filter(function (candidate) {
-    return candidate.value >= 20 && candidate.value <= 20000;
+    findDeepTotalCandidates(
+      item,
+      index,
+      travelers,
+      item,
+      'item',
+      deepTotalCandidates
+    );
+
+    allCandidates = allCandidates.concat(explicitCandidates, deepTotalCandidates);
   });
 
-  if (filtered.length === 0) {
-    return {
-      pricePerPerson: null,
-      debugCandidates: candidates.slice(0, 20),
-    };
-  }
+  allCandidates = dedupeCandidates(allCandidates);
 
-  const perPersonCandidates = filtered.filter(function (candidate) {
-    const lower = candidate.path.toLowerCase();
-
+  allCandidates = allCandidates.filter(function (candidate) {
     return (
-      lower.includes('perperson') ||
-      lower.includes('per_person') ||
-      lower.includes('per-passenger') ||
-      lower.includes('perpassenger') ||
-      lower.includes('adult') ||
-      lower.endsWith('.price') ||
-      lower.endsWith('.amount') ||
-      lower.endsWith('.value')
+      candidate.pricePerPerson >= 100 &&
+      candidate.pricePerPerson <= 10000 &&
+      candidate.totalPrice >= candidate.pricePerPerson
     );
   });
 
-  const totalCandidates = filtered.filter(function (candidate) {
-    const lower = candidate.path.toLowerCase();
+  const roundTripCandidates = allCandidates.filter(function (candidate) {
+    const item = items[candidate.rawIndex];
 
-    return (
-      lower.includes('total') ||
-      lower.includes('totalprice') ||
-      lower.includes('total_price') ||
-      lower.includes('grandtotal')
-    );
+    return hasRoundTripSignal(item);
   });
 
-  if (perPersonCandidates.length > 0) {
-    const lowestPerPerson = perPersonCandidates.reduce(function (lowest, current) {
-      return current.value < lowest.value ? current : lowest;
-    });
+  const usableCandidates =
+    roundTripCandidates.length > 0 ? roundTripCandidates : allCandidates;
 
-    return {
-      pricePerPerson: lowestPerPerson.value,
-      debugCandidates: filtered.slice(0, 20),
-    };
-  }
-
-  if (totalCandidates.length > 0) {
-    const lowestTotal = totalCandidates.reduce(function (lowest, current) {
-      return current.value < lowest.value ? current : lowest;
-    });
-
-    return {
-      pricePerPerson: lowestTotal.value / Math.max(1, travelers),
-      debugCandidates: filtered.slice(0, 20),
-    };
-  }
-
-  const lowest = filtered.reduce(function (lowestCandidate, currentCandidate) {
-    return currentCandidate.value < lowestCandidate.value
-      ? currentCandidate
-      : lowestCandidate;
+  usableCandidates.sort(function (a, b) {
+    return a.pricePerPerson - b.pricePerPerson;
   });
 
   return {
-    pricePerPerson: lowest.value,
-    debugCandidates: filtered.slice(0, 20),
+    selected: usableCandidates.length > 0 ? usableCandidates[0] : null,
+    candidates: usableCandidates.slice(0, 20),
   };
 }
 
@@ -315,29 +602,43 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = findBestPricePerPerson(items, travelers);
+    const result = chooseBestCandidate(items, travelers);
 
-    if (!result.pricePerPerson) {
+    if (!result.selected) {
       return NextResponse.json(
         {
-          error: 'Apify returned results, but no usable price field was found.',
+          error: 'Apify returned results, but no complete round-trip price was found.',
           input,
           rawCount: items.length,
           sample: items.slice(0, 3),
-          debugCandidates: result.debugCandidates,
+          candidates: result.candidates,
         },
         { status: 404 }
       );
     }
 
     return NextResponse.json({
-      pricePerPerson: Math.round(result.pricePerPerson),
-      totalFlightPrice: Math.round(result.pricePerPerson * travelers),
-      currency: 'EUR',
+      pricePerPerson: Math.round(result.selected.pricePerPerson),
+      totalFlightPrice: Math.round(result.selected.totalPrice),
+      currency: result.selected.currency || 'EUR',
       source: 'apify',
+      provider: result.selected.provider,
+      title: result.selected.title,
+      pricePath: result.selected.pricePath,
       fetchedAt: new Date().toISOString(),
       rawCount: items.length,
       input,
+      candidates: result.candidates.map(function (candidate) {
+        return {
+          pricePerPerson: Math.round(candidate.pricePerPerson),
+          totalPrice: Math.round(candidate.totalPrice),
+          provider: candidate.provider,
+          currency: candidate.currency,
+          title: candidate.title,
+          rawIndex: candidate.rawIndex,
+          pricePath: candidate.pricePath,
+        };
+      }),
     });
   } catch (error) {
     return NextResponse.json(
