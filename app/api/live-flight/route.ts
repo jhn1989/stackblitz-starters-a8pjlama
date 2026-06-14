@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const ROUTE_VERSION = 'live-flight-route-v9-provider-link';
+const ROUTE_VERSION = 'live-flight-route-v10-total-price-provider-link';
 
 type LiveFlightRequest = {
   origin: string;
@@ -72,45 +72,74 @@ function normalizeAirport(value: string) {
   return value.trim().toUpperCase();
 }
 
-function getBestProviderLink(item: ApifyFlightItem | null): string {
+function addSearchParamsToUrl(
+  url: string,
+  travelers: number,
+  currency: string
+): string {
+  if (!url || !url.trim()) {
+    return '';
+  }
+
+  try {
+    const parsedUrl = new URL(url);
+
+    parsedUrl.searchParams.set('adults', String(Math.max(1, travelers)));
+    parsedUrl.searchParams.set('children', '0');
+    parsedUrl.searchParams.set('infants', '0');
+    parsedUrl.searchParams.set('currency', currency || 'EUR');
+    parsedUrl.searchParams.set('sortBy', 'price');
+    parsedUrl.searchParams.set('sort', 'price');
+
+    return parsedUrl.toString();
+  } catch {
+    return url;
+  }
+}
+
+function getBestProviderLink(
+  item: ApifyFlightItem | null,
+  travelers: number
+): string {
   if (!item || !item.links) {
     return '';
   }
 
+  const currency = item.currency || 'EUR';
   const cheapestSource = String(item.cheapestSource || '').toLowerCase();
 
   if (cheapestSource && item.links[cheapestSource]) {
     const link = item.links[cheapestSource];
 
     if (typeof link === 'string' && link.trim()) {
-      return link;
+      return addSearchParamsToUrl(link, travelers, currency);
     }
   }
 
   if (typeof item.links.kiwi === 'string' && item.links.kiwi.trim()) {
-    return item.links.kiwi;
+    return addSearchParamsToUrl(item.links.kiwi, travelers, currency);
   }
 
   if (typeof item.links.book === 'string' && item.links.book.trim()) {
-    return item.links.book;
+    return addSearchParamsToUrl(item.links.book, travelers, currency);
   }
 
   if (
     typeof item.links.googleFlights === 'string' &&
     item.links.googleFlights.trim()
   ) {
-    return item.links.googleFlights;
+    return addSearchParamsToUrl(item.links.googleFlights, travelers, currency);
   }
 
   return '';
 }
 
-function findBestPricePerPerson(items: ApifyFlightItem[]): {
-  pricePerPerson: number | null;
+function findBestTotalFlightPrice(items: ApifyFlightItem[]): {
+  totalFlightPrice: number | null;
   selectedItem: ApifyFlightItem | null;
   priceSource: string;
 } {
-  let bestPrice: number | null = null;
+  let bestTotalPrice: number | null = null;
   let selectedItem: ApifyFlightItem | null = null;
   let priceSource = '';
 
@@ -140,12 +169,12 @@ function findBestPricePerPerson(items: ApifyFlightItem[]): {
     }
 
     candidates.forEach(function (candidate) {
-      if (candidate.value < 50 || candidate.value > 10000) {
+      if (candidate.value < 50 || candidate.value > 50000) {
         return;
       }
 
-      if (bestPrice === null || candidate.value < bestPrice) {
-        bestPrice = candidate.value;
+      if (bestTotalPrice === null || candidate.value < bestTotalPrice) {
+        bestTotalPrice = candidate.value;
         selectedItem = item;
         priceSource = candidate.source;
       }
@@ -153,7 +182,7 @@ function findBestPricePerPerson(items: ApifyFlightItem[]): {
   });
 
   return {
-    pricePerPerson: bestPrice,
+    totalFlightPrice: bestTotalPrice,
     selectedItem,
     priceSource,
   };
@@ -175,9 +204,11 @@ function validateReturnedRoute(
   const returnedOrigin = normalizeAirport(
     item.from?.airport || item.origin || ''
   );
+
   const returnedDestination = normalizeAirport(
     item.to?.airport || item.destination || ''
   );
+
   const returnedDate = String(item.departDate || '');
 
   if (returnedOrigin && returnedOrigin !== origin) {
@@ -227,7 +258,7 @@ export async function GET() {
     ok: true,
     routeVersion: ROUTE_VERSION,
     message:
-      'This is the active live-flight API route. GET and POST are both from v9.',
+      'This is the active live-flight API route. Apify bestPrice is treated as total flight price.',
   });
 }
 
@@ -339,9 +370,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = findBestPricePerPerson(items);
+    const result = findBestTotalFlightPrice(items);
 
-    if (!result.pricePerPerson || !result.selectedItem) {
+    if (!result.totalFlightPrice || !result.selectedItem) {
       return NextResponse.json(
         {
           error: 'Apify returned results, but no usable bestPrice was found.',
@@ -375,11 +406,13 @@ export async function POST(request: Request) {
       );
     }
 
-    const providerLink = getBestProviderLink(result.selectedItem);
+    const providerLink = getBestProviderLink(result.selectedItem, travelers);
+    const totalFlightPrice = Math.round(result.totalFlightPrice);
+    const pricePerPerson = Math.round(totalFlightPrice / travelers);
 
     return NextResponse.json({
-      pricePerPerson: Math.round(result.pricePerPerson),
-      totalFlightPrice: Math.round(result.pricePerPerson * travelers),
+      pricePerPerson: pricePerPerson,
+      totalFlightPrice: totalFlightPrice,
       currency: result.selectedItem.currency || 'EUR',
       source: 'apify',
       provider:
