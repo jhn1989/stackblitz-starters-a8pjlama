@@ -67,33 +67,68 @@ function parsePrice(value: unknown): number | null {
   return parsed;
 }
 
-function collectPriceCandidates(
+function isTotalPricePath(path: string): boolean {
+  const lower = path.toLowerCase();
+
+  return (
+    lower.includes('totalprice') ||
+    lower.includes('total_price') ||
+    lower.includes('totalamount') ||
+    lower.includes('total_amount') ||
+    lower.includes('pricetotal') ||
+    lower.includes('price_total') ||
+    lower.includes('grandtotal') ||
+    lower.includes('grand_total') ||
+    lower.includes('amounttotal') ||
+    lower.includes('amount_total') ||
+    lower.endsWith('.total') ||
+    lower.includes('.total.')
+  );
+}
+
+function isPerPersonPricePath(path: string): boolean {
+  const lower = path.toLowerCase();
+
+  return (
+    lower.includes('priceperperson') ||
+    lower.includes('price_per_person') ||
+    lower.includes('perpersonprice') ||
+    lower.includes('per_person_price') ||
+    lower.includes('peradult') ||
+    lower.includes('per_adult') ||
+    lower.includes('adultprice') ||
+    lower.includes('adult_price') ||
+    lower.includes('passengerprice') ||
+    lower.includes('passenger_price')
+  );
+}
+
+function collectCandidates(
   value: unknown,
   path: string,
-  results: PriceCandidate[]
+  totalCandidates: PriceCandidate[],
+  perPersonCandidates: PriceCandidate[]
 ) {
   if (value === null || value === undefined) {
     return;
   }
 
   if (typeof value === 'string' || typeof value === 'number') {
-    const lowerPath = path.toLowerCase();
+    const parsed = parsePrice(value);
 
-    const looksLikePrice =
-      lowerPath.includes('price') ||
-      lowerPath.includes('amount') ||
-      lowerPath.includes('fare') ||
-      lowerPath.includes('cost') ||
-      lowerPath.includes('total');
-
-    if (!looksLikePrice) {
+    if (parsed === null) {
       return;
     }
 
-    const parsed = parsePrice(value);
+    if (isTotalPricePath(path)) {
+      totalCandidates.push({
+        value: parsed,
+        path,
+      });
+    }
 
-    if (parsed !== null) {
-      results.push({
+    if (isPerPersonPricePath(path)) {
+      perPersonCandidates.push({
         value: parsed,
         path,
       });
@@ -104,7 +139,12 @@ function collectPriceCandidates(
 
   if (Array.isArray(value)) {
     value.forEach(function (child, index) {
-      collectPriceCandidates(child, path + '[' + index + ']', results);
+      collectCandidates(
+        child,
+        path + '[' + index + ']',
+        totalCandidates,
+        perPersonCandidates
+      );
     });
 
     return;
@@ -113,104 +153,84 @@ function collectPriceCandidates(
   if (typeof value === 'object') {
     Object.entries(value as Record<string, unknown>).forEach(function ([key, child]) {
       const nextPath = path ? path + '.' + key : key;
-      collectPriceCandidates(child, nextPath, results);
+
+      collectCandidates(
+        child,
+        nextPath,
+        totalCandidates,
+        perPersonCandidates
+      );
     });
   }
 }
 
-function getBestPricePerPerson(
+function findBestPrice(
   items: unknown[],
   travelers: number
 ): {
   pricePerPerson: number | null;
-  totalPrice: number | null;
+  totalFlightPrice: number | null;
   pricePath: string;
-  candidates: PriceCandidate[];
+  totalCandidates: PriceCandidate[];
+  perPersonCandidates: PriceCandidate[];
 } {
-  const candidates: PriceCandidate[] = [];
+  const totalCandidates: PriceCandidate[] = [];
+  const perPersonCandidates: PriceCandidate[] = [];
 
-  collectPriceCandidates(items, 'items', candidates);
+  collectCandidates(items, 'items', totalCandidates, perPersonCandidates);
 
-  const validCandidates = candidates.filter(function (candidate) {
-    return candidate.value >= 100 && candidate.value <= 20000;
-  });
+  const minimumTotal = travelers * 100;
+  const maximumTotal = travelers * 10000;
 
-  if (validCandidates.length === 0) {
-    return {
-      pricePerPerson: null,
-      totalPrice: null,
-      pricePath: '',
-      candidates: candidates.slice(0, 30),
-    };
-  }
-
-  const totalCandidates = validCandidates.filter(function (candidate) {
-    const path = candidate.path.toLowerCase();
-
-    return (
-      path.includes('totalprice') ||
-      path.includes('total_price') ||
-      path.includes('totalamount') ||
-      path.includes('total_amount') ||
-      path.endsWith('.total') ||
-      path.includes('.total.')
-    );
-  });
-
-  const perPersonCandidates = validCandidates.filter(function (candidate) {
-    const path = candidate.path.toLowerCase();
-
-    return (
-      path.includes('priceperperson') ||
-      path.includes('price_per_person') ||
-      path.includes('perperson') ||
-      path.includes('per_person') ||
-      path.includes('adultprice') ||
-      path.includes('adult_price')
-    );
-  });
-
-  if (totalCandidates.length > 0) {
-    totalCandidates.sort(function (a, b) {
+  const validTotalCandidates = totalCandidates
+    .filter(function (candidate) {
+      return candidate.value >= minimumTotal && candidate.value <= maximumTotal;
+    })
+    .sort(function (a, b) {
       return a.value - b.value;
     });
 
-    const selected = totalCandidates[0];
+  if (validTotalCandidates.length > 0) {
+    const selected = validTotalCandidates[0];
 
     return {
-      pricePerPerson: selected.value / Math.max(1, travelers),
-      totalPrice: selected.value,
+      pricePerPerson: selected.value / travelers,
+      totalFlightPrice: selected.value,
       pricePath: selected.path,
-      candidates: validCandidates.slice(0, 30),
+      totalCandidates: validTotalCandidates.slice(0, 20),
+      perPersonCandidates: perPersonCandidates.slice(0, 20),
     };
   }
 
-  if (perPersonCandidates.length > 0) {
-    perPersonCandidates.sort(function (a, b) {
+  const minimumPerPerson = 100;
+  const maximumPerPerson = 10000;
+
+  const validPerPersonCandidates = perPersonCandidates
+    .filter(function (candidate) {
+      return candidate.value >= minimumPerPerson && candidate.value <= maximumPerPerson;
+    })
+    .sort(function (a, b) {
       return a.value - b.value;
     });
 
-    const selected = perPersonCandidates[0];
+  if (validPerPersonCandidates.length > 0) {
+    const selected = validPerPersonCandidates[0];
 
     return {
       pricePerPerson: selected.value,
-      totalPrice: selected.value * Math.max(1, travelers),
+      totalFlightPrice: selected.value * travelers,
       pricePath: selected.path,
-      candidates: validCandidates.slice(0, 30),
+      totalCandidates: totalCandidates.slice(0, 20),
+      perPersonCandidates: validPerPersonCandidates.slice(0, 20),
     };
   }
 
-  validCandidates.sort(function (a, b) {
-    return a.value - b.value;
-  });
-
-  const selected = validCandidates[0];
-
   return {
-    pricePerPerson: selected.value,
-    totalPrice: selected.value * Math.max(1, travelers),
-    pricePath: selected.path,
-    candidates: validCandidates.slice(0, 30),
+    pricePerPerson: null,
+    totalFlightPrice: null,
+    pricePath: '',
+    totalCandidates: totalCandidates.slice(0, 20),
+    perPersonCandidates: perPersonCandidates.slice(0, 20),
   };
 }
 
@@ -313,16 +333,18 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = getBestPricePerPerson(items, travelers);
+    const result = findBestPrice(items, travelers);
 
-    if (!result.pricePerPerson || !result.totalPrice) {
+    if (!result.pricePerPerson || !result.totalFlightPrice) {
       return NextResponse.json(
         {
-          error: 'Apify returned results, but no usable flight price was found.',
+          error:
+            'Apify returned results, but no full total price field was found. The app refused to use generic price fields because they can be partial prices.',
           input,
           rawCount: items.length,
-          sample: items.slice(0, 3),
-          candidates: result.candidates,
+          totalCandidates: result.totalCandidates,
+          perPersonCandidates: result.perPersonCandidates,
+          sample: items.slice(0, 2),
         },
         { status: 404 }
       );
@@ -330,7 +352,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       pricePerPerson: Math.round(result.pricePerPerson),
-      totalFlightPrice: Math.round(result.totalPrice),
+      totalFlightPrice: Math.round(result.totalFlightPrice),
       currency: 'EUR',
       source: 'apify',
       provider: 'Apify flight scraper',
@@ -338,7 +360,13 @@ export async function POST(request: Request) {
       fetchedAt: new Date().toISOString(),
       rawCount: items.length,
       input,
-      candidates: result.candidates.map(function (candidate) {
+      totalCandidates: result.totalCandidates.map(function (candidate) {
+        return {
+          value: Math.round(candidate.value),
+          path: candidate.path,
+        };
+      }),
+      perPersonCandidates: result.perPersonCandidates.map(function (candidate) {
         return {
           value: Math.round(candidate.value),
           path: candidate.path,
