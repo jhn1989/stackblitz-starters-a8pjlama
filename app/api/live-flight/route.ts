@@ -10,16 +10,16 @@ type LiveFlightRequest = {
 
 type ApifyFlightItem = {
   airline?: string;
-  bestPrice?: number;
+  bestPrice?: number | string;
   prices?: {
-    cached?: number;
-    googleFlights?: number;
-    kiwi?: number;
-    travelpayouts?: number;
-    ryanair?: number;
-    easyjet?: number;
-    wizzair?: number;
-    norwegian?: number;
+    cached?: number | string;
+    googleFlights?: number | string;
+    kiwi?: number | string;
+    travelpayouts?: number | string;
+    ryanair?: number | string;
+    easyjet?: number | string;
+    wizzair?: number | string;
+    norwegian?: number | string;
     [key: string]: unknown;
   };
   duration?: string;
@@ -30,6 +30,7 @@ type ApifyFlightItem = {
   to?: {
     airport?: string;
   };
+  baggage?: unknown;
   links?: {
     googleFlights?: string | null;
     kiwi?: string | null;
