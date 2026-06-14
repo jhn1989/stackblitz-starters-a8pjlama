@@ -129,19 +129,13 @@ export async function POST(request: Request) {
     }
 
     const input = {
-      origin: body.origin,
-      destination: body.destination,
-      outboundDate: body.outboundDate,
-      inboundDate: body.inboundDate,
+      originAirport: body.origin,
+      destinationAirport: body.destination,
+      departureDate: body.outboundDate,
+      returnDate: body.inboundDate,
       adults: Math.max(1, body.travelers),
-      travelers: Math.max(1, body.travelers),
-      cabinClass: 'economy',
-      cabinclass: 'economy',
+      cabinClass: 'ECONOMY',
       currency: 'EUR',
-      market: 'DK',
-      locale: 'en-GB',
-      sortBy: 'cheapest',
-      sortby: 'cheapest',
     };
 
     const response = await fetch(
@@ -181,7 +175,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const pricePerPerson = getLowestPricePerPerson(items, Math.max(1, body.travelers));
+    const pricePerPerson = getLowestPricePerPerson(
+      items,
+      Math.max(1, body.travelers)
+    );
 
     if (!pricePerPerson) {
       return NextResponse.json(
